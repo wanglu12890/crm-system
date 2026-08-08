@@ -1,4 +1,7 @@
 <script setup lang="ts">
+// 导入 reactive 和 watch 函数，以及 UserSearchCriteria 类型
+// reactive 用于创建响应式对象，watch 用于监听响应式数据的变化
+// 什么是 type 类型？type 类型用于定义 TypeScript 中的类型别名
 import { reactive, watch } from 'vue'
 import type { UserSearchCriteria } from '@/types/user'
 

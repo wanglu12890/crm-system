@@ -48,10 +48,17 @@ const routes: RouteRecordRaw[] = [
       ...[
         ['system/role', 'SystemRole', '角色管理'],
         ['system/permission', 'SystemPermission', '权限管理'],
-        ['business/customer', 'Customer', '客户管理'],
+        ['business/customer-list', 'CustomerList', '客户列表'],
+        ['business/public-customer', 'PublicCustomer', '公海客户'],
         ['business/contact', 'Contact', '联系人管理'],
+        ['business/follow-up', 'FollowUp', '跟进记录'],
+        ['business/clue', 'Clue', '线索管理'],
         ['business/opportunity', 'Opportunity', '商机管理'],
         ['business/contract', 'Contract', '合同管理'],
+        ['analytics/report', 'SalesReport', '销售报表'],
+        ['analytics/customer-analysis', 'CustomerAnalysis', '客户分析'],
+        ['analytics/performance-analysis', 'PerformanceAnalysis', '业绩分析'],
+        ['analytics/ai', 'AiIntelligence', 'AI智能分析'],
         ['analytics', 'Analytics', '数据分析'],
         ['ai-analysis', 'AiAnalysis', 'AI分析']
       ].map(([path, name, title]) => ({

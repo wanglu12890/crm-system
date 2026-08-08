@@ -51,7 +51,7 @@ CREATE TABLE IF NOT EXISTS sys_role (
 
 CREATE TABLE IF NOT EXISTS sys_permission (
   id BIGINT NOT NULL,
-  parent_id BIGINT NOT NULL DEFAULT 0 COMMENT '父权限，0为根节点',
+  parent_id BIGINT NOT NULL DEFAULT 0 COMMENT '父权限 0为根节点',
   permission_code VARCHAR(128) NOT NULL COMMENT '权限标识',
   permission_name VARCHAR(64) NOT NULL,
   permission_type VARCHAR(16) NOT NULL COMMENT 'MENU/BUTTON/API',
@@ -77,6 +77,19 @@ CREATE TABLE IF NOT EXISTS sys_user_role (
   CONSTRAINT fk_sys_user_role_user FOREIGN KEY (user_id) REFERENCES sys_user (id),
   CONSTRAINT fk_sys_user_role_role FOREIGN KEY (role_id) REFERENCES sys_role (id)
 ) ENGINE=InnoDB COMMENT='用户角色关系';
+
+CREATE TABLE IF NOT EXISTS sys_role_permission (
+  id BIGINT NOT NULL COMMENT '雪花主键',
+  role_id BIGINT NOT NULL COMMENT '角色ID',
+  permission_id BIGINT NOT NULL COMMENT '权限ID',
+  create_time DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '创建时间',
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_sys_role_permission (role_id, permission_id),
+  KEY idx_sys_role_permission_role (role_id),
+  KEY idx_sys_role_permission_permission (permission_id),
+  CONSTRAINT fk_sys_role_permission_role FOREIGN KEY (role_id) REFERENCES sys_role (id),
+  CONSTRAINT fk_sys_role_permission_permission FOREIGN KEY (permission_id) REFERENCES sys_permission (id)
+) ENGINE=InnoDB COMMENT='角色权限关联表';
 
 CREATE TABLE IF NOT EXISTS customer (
   id BIGINT NOT NULL,

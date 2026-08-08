@@ -68,15 +68,24 @@ const users = ref<User[]>([
   }
 ])
 
+// 定义搜索条件的响应式对象，初始值为空
 const searchCriteria = ref<UserSearchCriteria>({
   username: '',
   role: '',
   status: ''
 })
+
+// 定义分页和对话框相关的响应式数据，ref(1) 表示当前页码，ref(5) 表示每页显示的条数。
 const currentPage = ref(1)
 const pageSize = ref(5)
+
+// 定义对话框的可见性、模式和正在编辑的用户对象，ref(false) 表示对话框初始为不可见
 const dialogVisible = ref(false)
+
+// 定义对话框模式，初始为 'create'，表示创建用户
 const dialogMode = ref<UserDialogMode>('create')
+
+// 定义正在编辑的用户对象，初始为 null，表示没有正在编辑的用户
 const editingUser = ref<User | null>(null)
 
 const filteredUsers = computed(() => {
@@ -95,6 +104,7 @@ const paginatedUsers = computed(() => {
   return filteredUsers.value.slice(start, start + pageSize.value)
 })
 
+// criteria: UserSearchCriteria 是一个类型注解，表示 handleSearch 函数的参数 criteria 的类型为 UserSearchCriteria。这样可以确保传入的参数符合 UserSearchCriteria 接口的结构要求。
 const handleSearch = (criteria: UserSearchCriteria) => {
   searchCriteria.value = criteria
   currentPage.value = 1
@@ -194,18 +204,22 @@ const handleSizeChange = (size: number) => {
       </div>
     </header>
 
+    <!-- 用户搜索组件 -->
     <UserSearch
-      :model-value="searchCriteria"
+      :model-value="searchCriteria" 
       @search="handleSearch"
       @reset="handleReset"
     />
 
+    <!-- 用户操作工具栏-新建用户 -->
     <div class="user-page__toolbar">
       <el-button type="primary" @click="handleCreate">新建用户</el-button>
     </div>
 
+    <!-- 用户表格组件 -->
     <UserTable :users="paginatedUsers" @edit="handleEdit" @delete="handleDelete" />
 
+    <!-- 用户分页组件 -->
     <div class="user-page__pagination">
       <el-pagination
         v-model:current-page="currentPage"
@@ -218,6 +232,7 @@ const handleSizeChange = (size: number) => {
       />
     </div>
 
+    <!-- 用户对话框组件 -->
     <UserDialog
       v-model="dialogVisible"
       :mode="dialogMode"

@@ -16,23 +16,35 @@ const route = useRoute()
     >
       <el-menu-item index="/admin/dashboard">首页</el-menu-item>
 
+      <el-sub-menu index="customer-management">
+        <template #title>客户管理</template>
+        <el-menu-item index="/admin/business/customer-list">客户列表</el-menu-item>
+        <el-menu-item index="/admin/business/public-customer">公海客户</el-menu-item>
+        <el-menu-item index="/admin/business/contact">联系人管理</el-menu-item>
+        <el-menu-item index="/admin/business/follow-up">跟进记录</el-menu-item>
+      </el-sub-menu>
+
+      <el-sub-menu index="sales-management">
+        <template #title>销售管理</template>
+        <el-menu-item index="/admin/business/clue">线索管理</el-menu-item>
+        <el-menu-item index="/admin/business/opportunity">商机管理</el-menu-item>
+        <el-menu-item index="/admin/business/contract">合同管理</el-menu-item>
+      </el-sub-menu>
+
+      <el-sub-menu index="data-analysis">
+        <template #title>数据分析</template>
+        <el-menu-item index="/admin/analytics/report">销售报表</el-menu-item>
+        <el-menu-item index="/admin/analytics/customer-analysis">客户分析</el-menu-item>
+        <el-menu-item index="/admin/analytics/performance-analysis">业绩分析</el-menu-item>
+        <el-menu-item index="/admin/analytics/ai">AI智能分析</el-menu-item>
+      </el-sub-menu>
+
       <el-sub-menu index="system">
         <template #title>系统管理</template>
         <el-menu-item index="/admin/system/user">用户管理</el-menu-item>
         <el-menu-item index="/admin/system/role">角色管理</el-menu-item>
         <el-menu-item index="/admin/system/permission">权限管理</el-menu-item>
       </el-sub-menu>
-
-      <el-sub-menu index="business">
-        <template #title>业务管理</template>
-        <el-menu-item index="/admin/business/customer">客户管理</el-menu-item>
-        <el-menu-item index="/admin/business/contact">联系人管理</el-menu-item>
-        <el-menu-item index="/admin/business/opportunity">商机管理</el-menu-item>
-        <el-menu-item index="/admin/business/contract">合同管理</el-menu-item>
-      </el-sub-menu>
-
-      <el-menu-item index="/admin/analytics">数据分析</el-menu-item>
-      <el-menu-item index="/admin/ai-analysis">AI分析</el-menu-item>
     </el-menu>
   </aside>
 </template>
