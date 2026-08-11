@@ -35,7 +35,3 @@ mybatis-plus:
       logic-delete-field: deleted
       logic-delete-value: 1
       logic-not-delete-value: 0
-
-jwt:
-  access-token-expiration: ${JWT_ACCESS_EXPIRATION:7200}
-  refresh-token-expiration: ${JWT_REFRESH_EXPIRATION:604800}

@@ -5,7 +5,9 @@ import com.company.crm.entity.SysUser;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
+import org.apache.ibatis.annotations.Update;
 
+import java.time.LocalDateTime;
 
 @Mapper
 public interface SysUserMapper extends BaseMapper<SysUser> {
@@ -35,4 +37,16 @@ public interface SysUserMapper extends BaseMapper<SysUser> {
             """)
     SysUser selectByUsername(@Param("username") String username);
 
+    @Update("""
+            UPDATE sys_user
+               SET last_login_at = #{lastLoginAt},
+                   updated_at = CURRENT_TIMESTAMP(3)
+             WHERE id = #{userId}
+               AND deleted = 0
+               AND status = 1
+            """)
+    int updateLastLoginAt(
+            @Param("userId") Long userId,
+            @Param("lastLoginAt") LocalDateTime lastLoginAt
+    );
 }
