@@ -3,6 +3,8 @@ package com.company.crm.controller;
 import com.company.crm.config.SecurityConfig;
 import com.company.crm.exception.AuthExceptionHandler;
 import com.company.crm.security.CustomUserDetailsService;
+import com.company.crm.security.JwtAuthenticationFilter;
+import com.company.crm.security.JwtService;
 import com.company.crm.security.RestAuthenticationEntryPoint;
 import com.company.crm.service.AuthService;
 import com.company.crm.vo.auth.TokenVO;
@@ -25,7 +27,12 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @WebMvcTest(AuthController.class)
-@Import({SecurityConfig.class, RestAuthenticationEntryPoint.class, AuthExceptionHandler.class})
+@Import({
+        SecurityConfig.class,
+        JwtAuthenticationFilter.class,
+        RestAuthenticationEntryPoint.class,
+        AuthExceptionHandler.class
+})
 class AuthControllerTest {
 
     @Autowired
@@ -39,6 +46,9 @@ class AuthControllerTest {
 
     @MockBean
     private PasswordEncoder passwordEncoder;
+
+    @MockBean
+    private JwtService jwtService;
 
     @Test
     void shouldAllowAnonymousLogin() throws Exception {
