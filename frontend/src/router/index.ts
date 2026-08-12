@@ -4,6 +4,7 @@
 // RouteRecordRaw：TypeScript 类型定义，约束路由配置的格式（path、name、component 等必须符合规范）。
 // type 关键字表示这只是一个类型导入，编译后会被删除，不会增加打包体积
 import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
+import { getAccessToken } from '@/utils/auth'
 
 // 路由配置
 const routes: RouteRecordRaw[] = [
@@ -78,7 +79,26 @@ const routes: RouteRecordRaw[] = [
 ]
 
 // 创建路由实例，使用 HTML5 History 模式，并传入路由配置
-export default createRouter({
+const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes
 })
+
+router.beforeEach((to) => {
+  const accessToken = getAccessToken()
+
+  if (to.path === '/login' && accessToken) {
+    return '/admin/dashboard'
+  }
+
+  if (to.path.startsWith('/admin') && !accessToken) {
+    return {
+      path: '/login',
+      query: { redirect: to.fullPath }
+    }
+  }
+
+  return true
+})
+
+export default router

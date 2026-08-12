@@ -10,7 +10,6 @@ export interface LoginRequest {
 // 定义登录响应的接口，包含访问令牌、刷新令牌和过期时间字段。
 export interface LoginResponse {
   accessToken: string
-  refreshToken: string
   expiresIn: number
 }
 

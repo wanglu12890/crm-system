@@ -1,6 +1,11 @@
 <script setup lang="ts">
 import { reactive, ref } from 'vue' // 引入 Vue 的响应式 API，用于创建响应式对象和引用。
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus'  // 引入 Element Plus 的消息提示组件和类型定义，用于表单验证和消息提示。
+import axios from 'axios'
+import { useRouter } from 'vue-router'
+import { login } from '@/api/auth'
+import { setAuthToken } from '@/utils/auth'
+import type { ApiProblemDetail } from '@/utils/request'
 
 // 什么是响应式？ 响应式是 Vue 3 中的一个特性，它允许我们创建响应式数据，当数据发生变化时，相关的视图会自动更新。
 // 什么是ref？ref 是 Vue 3 中的一个函数，用于创建一个响应式引用，它可以存储任何类型的值，并在值发生变化时触发视图更新。
@@ -15,6 +20,7 @@ interface LoginForm {
 
 // 创建一个空的ref，用来存储表单组件实例，以便在提交表单时调用验证方法。
 const formRef = ref<FormInstance>() 
+const router = useRouter()
 
 // 1.响应式数据。
 const submitting = ref(false)  // 提交状态，防止重复提交。初始： false，表示未提交。
@@ -37,7 +43,7 @@ const rules: FormRules<LoginForm> = {
   ]
 }
 
-// 登录处理函数，验证表单并模拟登录请求
+// 登录处理函数，验证表单并调用后端认证接口
 const handleLogin = async () => {
   // 通过.value访问实际的DOM元素或组件实例。
   if (!formRef.value || submitting.value) return // 如果表单引用不存在或正在提交，则直接返回，防止重复提交。
@@ -49,9 +55,20 @@ const handleLogin = async () => {
   // 数据变化
   submitting.value = true // 设置提交状态为 true，表示正在提交。
   try {
-    // 后续在此调用认证 API，并由认证 Store 保存登录状态。
-    // 3.Vue 3 中的响应式数据变化会自动更新视图，因此在提交状态改变时，按钮的加载状态会自动更新。
-    ElMessage.info('登录接口尚未接入')
+    const response = await login({
+      username: form.username,
+      password: form.password
+    })
+    setAuthToken(response.data)
+    await router.replace('/admin/dashboard')
+  } catch (error: unknown) {
+    const detail = axios.isAxiosError<ApiProblemDetail>(error)
+      ? error.response?.data?.detail
+      : undefined
+    const message = detail || (axios.isAxiosError(error) && !error.response
+      ? '无法连接服务器，请确认后端服务已启动'
+      : '登录失败，请稍后重试')
+    ElMessage.error(message)
   } finally {
     // 4.在 finally 块中，无论请求成功还是失败，都会将提交状态重置为 false，确保按钮恢复可点击状态。
     submitting.value = false
