@@ -1,9 +1,12 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
+import axios from 'axios'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import UserDialog from '@/components/system/user/UserDialog.vue'
 import UserSearch from '@/components/system/user/UserSearch.vue'
 import UserTable from '@/components/system/user/UserTable.vue'
+import { getUserList } from '@/api/user'
+import { ApiProblemDetail } from '@/utils/request'
 import type {
   User,
   UserDialogMode,
@@ -11,62 +14,23 @@ import type {
   UserSearchCriteria
 } from '@/types/user'
 
-const users = ref<User[]>([
-  {
-    id: 1,
-    username: 'admin',
-    name: '系统管理员',
-    role: '管理员',
-    phone: '13800000000',
-    status: '正常',
-    createTime: '2026-08-03'
-  },
-  {
-    id: 2,
-    username: 'zhangsan',
-    name: '张三',
-    role: '销售人员',
-    phone: '13900000000',
-    status: '正常',
-    createTime: '2026-08-03'
-  },
-  {
-    id: 3,
-    username: 'lisi',
-    name: '李四',
-    role: '销售经理',
-    phone: '13700000000',
-    status: '正常',
-    createTime: '2026-08-02'
-  },
-  {
-    id: 4,
-    username: 'wangwu',
-    name: '王五',
-    role: '销售人员',
-    phone: '13600000000',
-    status: '停用',
-    createTime: '2026-08-01'
-  },
-  {
-    id: 5,
-    username: 'zhaoliu',
-    name: '赵六',
-    role: '销售人员',
-    phone: '13500000000',
-    status: '正常',
-    createTime: '2026-07-31'
-  },
-  {
-    id: 6,
-    username: 'sunqi',
-    name: '孙七',
-    role: '销售经理',
-    phone: '13400000000',
-    status: '正常',
-    createTime: '2026-07-30'
+const users = ref<User[]>([])
+const loading = ref(false)
+const loadUsers = async () => {
+  loading.value = true
+  try {
+    const response = await getUserList()
+    users.value = response.data
+  } catch (error: unknown) {
+    const detail = axios.isAxiosError<ApiProblemDetail>(error)
+      ? error.response?.data?.detail
+      : undefined
+    ElMessage.error(detail || '用户列表加载失败，请稍后重试')
+  } finally {
+    loading.value = false
   }
-])
+}
+onMounted(loadUsers)
 
 // 定义搜索条件的响应式对象，初始值为空
 const searchCriteria = ref<UserSearchCriteria>({
