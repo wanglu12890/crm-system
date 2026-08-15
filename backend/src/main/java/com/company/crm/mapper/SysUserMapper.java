@@ -2,12 +2,15 @@ package com.company.crm.mapper;
 
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.company.crm.entity.SysUser;
+import com.company.crm.vo.user.UserListVO;
+
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
 import org.apache.ibatis.annotations.Update;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Mapper
 public interface SysUserMapper extends BaseMapper<SysUser> {
@@ -37,6 +40,23 @@ public interface SysUserMapper extends BaseMapper<SysUser> {
             """)
     SysUser selectByUsername(@Param("username") String username);
 
+        @Select("""
+            SELECT CAST(u.id AS CHAR) AS id,
+                   u.username,
+                   u.real_name AS name,
+                   COALESCE(GROUP_CONCAT(DISTINCT r.role_name ORDER BY r.id SEPARATOR '、'), '未分配') AS role,
+                   COALESCE(u.mobile, '') AS phone,
+                   CASE u.status WHEN 1 THEN '正常' ELSE '停用' END AS status,
+                   DATE_FORMAT(u.created_at, '%Y-%m-%d') AS createTime
+              FROM sys_user u
+              LEFT JOIN sys_user_role ur ON ur.user_id = u.id
+              LEFT JOIN sys_role r ON r.id = ur.role_id AND r.status = 1 AND r.deleted = 0
+             WHERE u.deleted = 0
+             GROUP BY u.id, u.username, u.real_name, u.mobile, u.status, u.created_at
+             ORDER BY u.created_at DESC, u.id ASC
+            """)
+    List<UserListVO> selectUserList();
+
     @Update("""
             UPDATE sys_user
                SET last_login_at = #{lastLoginAt},
@@ -49,4 +69,5 @@ public interface SysUserMapper extends BaseMapper<SysUser> {
             @Param("userId") Long userId,
             @Param("lastLoginAt") LocalDateTime lastLoginAt
     );
+
 }
