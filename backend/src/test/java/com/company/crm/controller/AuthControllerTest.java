@@ -6,6 +6,7 @@ import com.company.crm.security.CustomUserDetailsService;
 import com.company.crm.security.JwtAuthenticationFilter;
 import com.company.crm.security.JwtService;
 import com.company.crm.security.RestAuthenticationEntryPoint;
+import com.company.crm.security.SecurityUser;
 import com.company.crm.service.AuthService;
 import com.company.crm.vo.auth.TokenVO;
 import org.junit.jupiter.api.Test;
@@ -19,10 +20,13 @@ import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.web.servlet.MockMvc;
 
+import java.util.List;
+
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -95,5 +99,38 @@ class AuthControllerTest {
         mockMvc.perform(get("/protected-resource"))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.code").value("UNAUTHORIZED"));
+    }
+
+    @Test
+    void shouldRequireAuthenticationForCurrentUser() throws Exception {
+        mockMvc.perform(get("/auth/me"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("UNAUTHORIZED"));
+    }
+
+    @Test
+    void shouldReturnAuthenticatedCurrentUserWithoutInternalSecurityFields() throws Exception {
+        SecurityUser securityUser = new SecurityUser(
+                1L,
+                "admin",
+                "bcrypt-password",
+                "超级管理员",
+                1,
+                0,
+                List.of()
+        );
+
+        mockMvc.perform(get("/auth/me").with(user(securityUser)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(1))
+                .andExpect(jsonPath("$.username").value("admin"))
+                .andExpect(jsonPath("$.realName").value("超级管理员"))
+                .andExpect(jsonPath("$.roles").isArray())
+                .andExpect(jsonPath("$.roles").isEmpty())
+                .andExpect(jsonPath("$.password").doesNotExist())
+                .andExpect(jsonPath("$.passwordHash").doesNotExist())
+                .andExpect(jsonPath("$.status").doesNotExist())
+                .andExpect(jsonPath("$.deleted").doesNotExist())
+                .andExpect(jsonPath("$.authorities").doesNotExist());
     }
 }

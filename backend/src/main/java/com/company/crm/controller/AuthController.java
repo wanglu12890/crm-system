@@ -1,15 +1,21 @@
 package com.company.crm.controller;
 
 import com.company.crm.dto.auth.LoginDTO;
+import com.company.crm.security.SecurityUser;
 import com.company.crm.service.AuthService;
+import com.company.crm.vo.auth.CurrentUserVO;
 import com.company.crm.vo.auth.TokenVO;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+
+import java.util.List;
 
 /**
  * 认证控制器
@@ -36,5 +42,18 @@ public class AuthController {
         TokenVO tokenVO = authService.login(loginDTO);
         // 8. 返回 HTTP 200 + 令牌数据
         return ResponseEntity.ok(tokenVO);
+    }
+
+    @GetMapping("/me")
+    public ResponseEntity<CurrentUserVO> currentUser(
+            @AuthenticationPrincipal SecurityUser securityUser
+    ) {
+        CurrentUserVO currentUser = new CurrentUserVO(
+                securityUser.getUserId(),
+                securityUser.getUsername(),
+                securityUser.getRealName(),
+                List.of()
+        );
+        return ResponseEntity.ok(currentUser);
     }
 }
