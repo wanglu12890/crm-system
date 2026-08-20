@@ -54,6 +54,10 @@ public class AuthController {
         //     "AuthController SecurityUser roles = " + securityUser.getRoles()
         // );
 
+        // System.out.println(
+        //     securityUser.getAuthorities()
+        // );
+
         CurrentUserVO currentUser = new CurrentUserVO(
                 securityUser.getUserId(),
                 securityUser.getUsername(),

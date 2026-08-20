@@ -11,6 +11,7 @@ import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 
@@ -46,9 +47,24 @@ public class CustomUserDetailsService implements UserDetailsService {
 
         List<String> permissions = sysUserMapper.selectPermissionCodesByUserId(user.getId());
 
-        // Role and permission authorities will be loaded in the authorization phase.
+        // Role and permission authorities will be loaded in the authorization phase.        
+        List<SimpleGrantedAuthority> authorities = new ArrayList<>(); 
+
+        // 把角色转换进去authorities
+        for(String role : roles){
+            authorities.add(
+                new SimpleGrantedAuthority("ROLE_" + role)
+            );
+        }
+
+        // 把权限转换进去
+        for(String permission : permissions){
+            authorities.add(
+                new SimpleGrantedAuthority(permission)
+            );
+        }
+
         // 如果顺利查到该用户，则转换成一个新的对象 SecurityUser，并返回
-        List<SimpleGrantedAuthority> authorities = List.of(); 
         return new SecurityUser(
                 user.getId(),
                 user.getUsername(),
