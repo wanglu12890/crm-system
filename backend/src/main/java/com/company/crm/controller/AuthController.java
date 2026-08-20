@@ -58,7 +58,8 @@ public class AuthController {
                 securityUser.getUserId(),
                 securityUser.getUsername(),
                 securityUser.getRealName(),
-                securityUser.getRoles()
+                securityUser.getRoles(),
+                securityUser.getPermissions()
         );
         return ResponseEntity.ok(currentUser);
     }

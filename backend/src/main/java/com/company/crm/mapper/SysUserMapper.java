@@ -43,15 +43,30 @@ public interface SysUserMapper extends BaseMapper<SysUser> {
                         """)
         SysUser selectByUsername(@Param("username") String username);
 
-        // 角色查詢
+        // 根据userId查询用户角色编码
         @Select("""
                         SELECT r.role_code
                         FROM sys_user_role ur
                         JOIN sys_role r ON ur.role_id = r.id
                         WHERE ur.user_id = #{userId}
+                        AND r.status = 1
+                        AND r.deleted = 0
                         """)
         List<String> selectRoleCodesByUserId(Long userId);
-
+         
+        // 根据userId查询查询权限编码
+        @Select("""
+              SELECT DISTINCT p.permission_code
+              FROM sys_user_role ur
+              JOIN sys_role r ON ur.role_id = r.id
+              JOIN sys_role_permission rp ON ur.role_id = rp.role_id
+              JOIN sys_permission p ON rp.permission_id = p.id
+              WHERE ur.user_id = #{userId}
+              AND r.status = 1
+              AND p.status = 1
+              ORDER BY p.permission_code
+              """)
+        List<String> selectPermissionCodesByUserId(Long userId);
 
         // 用戶列表查詢
         @Select("""

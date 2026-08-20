@@ -6,6 +6,7 @@ public record CurrentUserVO(
         Long id,
         String username,
         String realName,
-        List<String> roles
+        List<String> roles,
+        List<String> permissions
 ) {
 }

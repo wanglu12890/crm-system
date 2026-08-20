@@ -21,7 +21,10 @@ public final class SecurityUser implements UserDetails {
     private final String realName;
     private final Integer status;
     private final Integer deleted;
+
     private final List<String> roles;
+    private final List<String> permissions;
+
     private final List<GrantedAuthority> authorities;
 
     public SecurityUser(
@@ -32,6 +35,7 @@ public final class SecurityUser implements UserDetails {
             Integer status,
             Integer deleted,
             List<String> roles,
+            List<String> permissions,
             Collection<? extends GrantedAuthority> authorities
     ) {
         this.userId = userId;
@@ -41,6 +45,7 @@ public final class SecurityUser implements UserDetails {
         this.status = status;
         this.deleted = deleted;
         this.roles = List.copyOf(roles);
+        this.permissions = List.copyOf(permissions);
         this.authorities = List.copyOf(authorities);
     }
 
@@ -54,6 +59,10 @@ public final class SecurityUser implements UserDetails {
 
     public List<String> getRoles(){
         return roles;
+    }
+
+    public List<String> getPermissions(){
+        return permissions;
     }
 
     @Override
