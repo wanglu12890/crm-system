@@ -44,16 +44,32 @@ request.interceptors.response.use(
   (response) => response,
 
   // 错误响应处理器，触发条件：任何非 2xx 的状态码（400、401、403、500 等）或网络错误
-  (error: AxiosError<ApiProblemDetail>) => {
-    // 判断是否为登录请求
+  async(error: AxiosError<ApiProblemDetail>) => {
+
+    // 登录接口返回 401，通常代表用户名或密码错误。
+    // 此时不能按照“登录状态失效”处理。
     const isLoginRequest = error.config?.url === '/auth/login'
 
-    // 如果HTTP 状态码为 401 Unauthorized（未认证/token 过期）并且不是登录请求本身，
+    // 非登录接口返回 401：
+    // 通常说明 Token 不存在、过期、非法或被篡改，当前登录状态已经失效。
+    // 为什么需要为什么排除登录请求？
+    // 因为如果是登录接口&返回 401，不需要清除token，用户还没登录成功，本地本来就没有有效 token，或者输入了错误密码，应该让用户看到"用户名或密码错误"的提示
     if (error.response?.status === 401 && !isLoginRequest) {
-      removeAuthToken() // 则清除token
+      // 清除本地 JWT 和过期时间
+      removeAuthToken() 
+
+      // 动态导入 Router，避免 request.ts 与 router/index.ts
+      // 在模块加载阶段产生循环依赖。
+      const { default: router } = await import('@/router')
+
+      // 当前不在登录页时，立即退出后台并跳转登录页。
+      // 使用 replace，避免浏览器“后退”重新回到失效的后台页面。
+      if (router.currentRoute.value.path !== '/login') {
+        await router.replace('/login')
+      }
     }
 
-    // 为什么需要为什么排除登录请求？因为如果是登录接口&返回 401，不需要清除token，用户还没登录成功，本地本来就没有有效 token，或者输入了错误密码，应该让用户看到"用户名或密码错误"的提示
+  
 
     return Promise.reject(error)
   }
