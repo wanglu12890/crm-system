@@ -48,11 +48,17 @@ public class AuthController {
     public ResponseEntity<CurrentUserVO> currentUser(
             @AuthenticationPrincipal SecurityUser securityUser
     ) {
+        
+        // System.out.println("=== ENTER /auth/me ===");
+        // System.out.println(
+        //     "AuthController SecurityUser roles = " + securityUser.getRoles()
+        // );
+
         CurrentUserVO currentUser = new CurrentUserVO(
                 securityUser.getUserId(),
                 securityUser.getUsername(),
                 securityUser.getRealName(),
-                List.of()
+                securityUser.getRoles()
         );
         return ResponseEntity.ok(currentUser);
     }

@@ -40,6 +40,10 @@ public class CustomUserDetailsService implements UserDetailsService {
             throw new DisabledException("用户状态异常，禁止登录");
         }
 
+        List<String> roles = sysUserMapper.selectRoleCodesByUserId(user.getId());
+
+        // System.out.println("CustomUserDetailsService roles = " + roles);
+
         // Role and permission authorities will be loaded in the authorization phase.
         // 如果顺利查到该用户，则转换成一个新的对象 SecurityUser，并返回
         List<SimpleGrantedAuthority> authorities = List.of(); 
@@ -50,6 +54,7 @@ public class CustomUserDetailsService implements UserDetailsService {
                 user.getRealName(),
                 user.getStatus(),
                 user.getDeleted(),
+                roles,
                 authorities
         );
     }
