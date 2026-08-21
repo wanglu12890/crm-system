@@ -117,6 +117,8 @@ class AuthControllerTest {
                 "超级管理员",
                 1,
                 0,
+                List.of(),
+                List.of(),
                 List.of()
         );
 

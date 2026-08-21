@@ -78,7 +78,7 @@ class JwtAuthenticationFilterTest {
     @BeforeEach
     void setUp() {
         securityUser = new SecurityUser(
-                1L, "admin", "bcrypt-password", "系统管理员", 1, 0, List.of()
+                1L, "admin", "bcrypt-password", "系统管理员", 1, 0, List.of(),List.of(),List.of()
         );
         when(userDetailsService.loadUserByUsername("admin")).thenReturn(securityUser);
     }
