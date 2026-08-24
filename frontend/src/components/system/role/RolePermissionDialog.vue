@@ -1,12 +1,12 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import type { Role } from '@/types/role'
+import { getPermissionTree } from '@/api/permission';
+import type { PermissionTreeNode} from '@/types/permission'
+import axios from 'axios';
+import { ApiProblemDetail } from '@/utils/request';
+import { ElMessage } from 'element-plus';
 
-interface PermissionNode {
-  id: string
-  label: string
-  children?: PermissionNode[]
-}
 
 const props = defineProps<{
   modelValue: boolean
@@ -24,42 +24,41 @@ const visible = computed({
   set: (value: boolean) => emit('update:modelValue', value)
 })
 
-// TODO: 后续由 GET /permissions 或角色权限接口动态加载。
-const permissionTree: PermissionNode[] = [
-  {
-    id: 'system',
-    label: '系统管理',
-    children: [
-      {
-        id: 'user-management',
-        label: '用户管理',
-        children: [
-          { id: 'user:list', label: '查看用户' },
-          { id: 'user:create', label: '新建用户' },
-          { id: 'user:update', label: '编辑用户' },
-          { id: 'user:delete', label: '删除用户' },
-          { id: 'user:assign_role', label: '分配用户角色' }
-        ]
-      },
-      {
-        id: 'role-management',
-        label: '角色管理',
-        children: [
-          { id: 'role:list', label: '查看角色' },
-          { id: 'role:create', label: '新建角色' },
-          { id: 'role:update', label: '编辑角色' },
-          { id: 'role:delete', label: '删除角色' },
-          { id: 'role:assign_permission', label: '配置角色权限' }
-        ]
-      }
-    ]
+
+const permissionTree = ref<PermissionTreeNode[]>([])
+const loading = ref(false)
+
+const treeProps = {
+  children: 'children',
+  label: 'permissionName'
+}
+
+const loadPermissionTree = async () => {
+  loading.value = true
+
+  try {
+    const response = await getPermissionTree()
+    permissionTree.value = response.data
+  } catch (error: unknown) {
+    permissionTree.value = []
+
+    const detail = axios.isAxiosError<ApiProblemDetail>(error)
+      ? error.response?.data?.detail
+      : undefined
+    ElMessage.error(detail || '权限树加载失败，请稍后重试')
+  } finally {
+    loading.value = false
   }
-]
+}
+
+
 
 watch(
   () => props.modelValue,
-  (opened) => {
+  async(opened) => {
     if (!opened) return
+
+    await loadPermissionTree()
     // TODO: 后续加载当前角色已有权限并通过 setCheckedKeys 回显。
   }
 )
@@ -81,14 +80,17 @@ const handleSave = () => {
     <div class="permission-dialog__summary">
       当前角色：<strong>{{ role?.roleName || '未选择角色' }}</strong>
     </div>
-    <div class="permission-dialog__tree">
+    <div 
+      class="permission-dialog__tree"
+      v-loading="loading"
+    >
       <el-tree
         ref="treeRef"
         :data="permissionTree"
         node-key="id"
         show-checkbox
         default-expand-all
-        :props="{ label: 'label', children: 'children' }"
+        :props="treeProps"
       />
     </div>
 
