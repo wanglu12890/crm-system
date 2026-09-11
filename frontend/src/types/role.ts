@@ -23,4 +23,6 @@ export interface RoleFormData {
   remark: string
 }
 
+export type CreateRoleRequest = Omit<RoleFormData, 'id'>
+
 export type RoleDialogMode = 'create' | 'edit'

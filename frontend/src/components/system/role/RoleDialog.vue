@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue'
-import type { FormInstance, FormRules } from 'element-plus'
+import axios from 'axios'
+import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
+import { createRole } from '@/api/role'
+import type { ApiProblemDetail } from '@/utils/request'
 import type { Role, RoleDialogMode, RoleFormData } from '@/types/role'
 
 const props = defineProps<{
@@ -12,9 +15,11 @@ const props = defineProps<{
 const emit = defineEmits<{
   'update:modelValue': [visible: boolean]
   save: [data: RoleFormData]
+  success: []
 }>()
 
 const formRef = ref<FormInstance>()
+const submitting = ref(false)
 const createEmptyForm = (): RoleFormData => ({
   roleName: '',
   roleCode: '',
@@ -62,9 +67,34 @@ watch(
 )
 
 const handleSave = async () => {
-  if (!formRef.value) return
+  if (!formRef.value || submitting.value) return
   const valid = await formRef.value.validate().catch(() => false)
-  if (valid) emit('save', { ...form })
+  if (!valid) return
+
+  if (props.mode === 'edit') {
+    emit('save', { ...form })
+    return
+  }
+
+  submitting.value = true
+  try {
+    await createRole({
+      roleName: form.roleName,
+      roleCode: form.roleCode,
+      status: form.status,
+      remark: form.remark
+    })
+    ElMessage.success('角色创建成功')
+    visible.value = false
+    emit('success')
+  } catch (error: unknown) {
+    const detail = axios.isAxiosError<ApiProblemDetail>(error)
+      ? error.response?.data?.detail
+      : undefined
+    ElMessage.error(detail || '角色创建失败，请稍后重试')
+  } finally {
+    submitting.value = false
+  }
 }
 
 const handleClosed = () => {
@@ -115,8 +145,8 @@ const handleClosed = () => {
     </el-form>
 
     <template #footer>
-      <el-button @click="visible = false">取消</el-button>
-      <el-button type="primary" @click="handleSave">确定</el-button>
+      <el-button :disabled="submitting" @click="visible = false">取消</el-button>
+      <el-button type="primary" :loading="submitting" @click="handleSave">确定</el-button>
     </template>
   </el-dialog>
 </template>

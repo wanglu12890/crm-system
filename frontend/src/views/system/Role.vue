@@ -15,10 +15,9 @@ import type {
 import axios from 'axios'
 import { ApiProblemDetail } from '@/utils/request'
 
-// TODO: 后续由角色列表接口加载，当前阶段必须保持为空。
 const roles = ref<Role[]>([])
 const loading = ref(false)
-const LoadRoles = async () => {
+const loadRoles = async () => {
   loading.value = true
   try{
     const response = await getRoleList()
@@ -33,7 +32,7 @@ const LoadRoles = async () => {
     loading.value = false
   }
 }
-onMounted(LoadRoles)
+onMounted(loadRoles)
 
 const searchCriteria = ref<RoleSearchCriteria>({
   roleName: '',
@@ -157,6 +156,7 @@ const handleSizeChange = (size: number) => {
       :mode="roleDialogMode"
       :role="editingRole"
       @save="handleSaveRole"
+      @success="loadRoles"
     />
 
     <RolePermissionDialog

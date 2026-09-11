@@ -1,6 +1,7 @@
 package com.company.crm.controller;
 
 import com.company.crm.config.SecurityConfig;
+import com.company.crm.exception.DuplicateRoleCodeException;
 import com.company.crm.security.CustomUserDetailsService;
 import com.company.crm.security.JwtAuthenticationFilter;
 import com.company.crm.security.JwtService;
@@ -18,8 +19,11 @@ import org.springframework.test.web.servlet.MockMvc;
 import java.util.List;
 
 import static org.mockito.Mockito.when;
+import static org.mockito.ArgumentMatchers.any;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -67,5 +71,58 @@ class RoleControllerTest {
                 .andExpect(jsonPath("$[0].status").value(1))
                 .andExpect(jsonPath("$[0].permissionCount").value(0))
                 .andExpect(jsonPath("$[0].remark").value("系统角色"));
+    }
+
+    @Test
+    void shouldCreateRoleForAuthenticatedRequest() throws Exception {
+        when(roleService.createRole(any())).thenReturn(100L);
+
+        mockMvc.perform(post("/roles")
+                        .with(user("admin"))
+                        .contentType("application/json")
+                        .content("""
+                                {
+                                  "roleName": "系统管理员",
+                                  "roleCode": "SYSTEM_ADMIN",
+                                  "status": 1,
+                                  "remark": "负责系统用户及普通角色管理"
+                                }
+                                """))
+                .andExpect(status().isCreated())
+                .andExpect(content().string("100"));
+    }
+
+    @Test
+    void shouldRejectRoleWithoutRoleCode() throws Exception {
+        mockMvc.perform(post("/roles")
+                        .with(user("admin"))
+                        .contentType("application/json")
+                        .content("""
+                                {
+                                  "roleName": "测试角色",
+                                  "roleCode": "",
+                                  "status": 1
+                                }
+                                """))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void shouldReturnConflictWhenRoleCodeAlreadyExists() throws Exception {
+        when(roleService.createRole(any())).thenThrow(new DuplicateRoleCodeException("SYSTEM_ADMIN"));
+
+        mockMvc.perform(post("/roles")
+                        .with(user("admin"))
+                        .contentType("application/json")
+                        .content("""
+                                {
+                                  "roleName": "系统管理员",
+                                  "roleCode": "SYSTEM_ADMIN",
+                                  "status": 1
+                                }
+                                """))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("ROLE_CODE_ALREADY_EXISTS"))
+                .andExpect(jsonPath("$.detail").value("角色编码 SYSTEM_ADMIN 已存在"));
     }
 }
