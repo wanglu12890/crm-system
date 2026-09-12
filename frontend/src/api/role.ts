@@ -8,3 +8,7 @@ export function getRoleList() {
 export function createRole(data: CreateRoleRequest) {
   return request.post<number>('/roles', data)
 }
+
+export function getRolePermissionIds(roleId: string) {
+  return request.get<string[]>(`/roles/${roleId}/permissions`)
+}

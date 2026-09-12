@@ -58,6 +58,13 @@ class RoleControllerTest {
     }
 
     @Test
+    void shouldRejectAnonymousRolePermissionRequest() throws Exception {
+        mockMvc.perform(get("/roles/10/permissions"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("UNAUTHORIZED"));
+    }
+
+    @Test
     void shouldReturnRoleListForAuthenticatedRequest() throws Exception {
         when(roleService.listRoles()).thenReturn(List.of(
                 new RoleListVO(1L, "超级管理员", "SUPER_ADMIN", 1, 0L, "系统角色")
@@ -65,12 +72,35 @@ class RoleControllerTest {
 
         mockMvc.perform(get("/roles").with(user("admin")))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$[0].id").value(1))
+                .andExpect(jsonPath("$[0].id").value("1"))
                 .andExpect(jsonPath("$[0].roleName").value("超级管理员"))
                 .andExpect(jsonPath("$[0].roleCode").value("SUPER_ADMIN"))
                 .andExpect(jsonPath("$[0].status").value(1))
                 .andExpect(jsonPath("$[0].permissionCount").value(0))
                 .andExpect(jsonPath("$[0].remark").value("系统角色"));
+    }
+
+    @Test
+    void shouldReturnRolePermissionIdsAsStrings() throws Exception {
+        long roleId = 2085985855238352896L;
+        when(roleService.getRolePermissionIds(roleId)).thenReturn(List.of(
+                2085985855238352897L,
+                2085985855238352898L
+        ));
+
+        mockMvc.perform(get("/roles/{roleId}/permissions", roleId).with(user("admin")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0]").value("2085985855238352897"))
+                .andExpect(jsonPath("$[1]").value("2085985855238352898"));
+    }
+
+    @Test
+    void shouldReturnEmptyPermissionIdsWhenRoleHasNoPermissions() throws Exception {
+        when(roleService.getRolePermissionIds(10L)).thenReturn(List.of());
+
+        mockMvc.perform(get("/roles/10/permissions").with(user("admin")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$").isEmpty());
     }
 
     @Test

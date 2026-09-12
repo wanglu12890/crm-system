@@ -1,6 +1,6 @@
 export interface PermissionTreeNode {
-  id: number
-  parentId: number
+  id: string
+  parentId: string
   permissionCode: string
   permissionName: string
   permissionType: 'MENU' | 'BUTTON' | 'API'

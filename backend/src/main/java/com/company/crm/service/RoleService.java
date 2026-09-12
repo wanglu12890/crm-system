@@ -9,5 +9,7 @@ public interface RoleService {
 
     List<RoleListVO> listRoles();
 
+    List<Long> getRolePermissionIds(Long roleId);
+
     Long createRole(CreateRoleDTO dto);
 }

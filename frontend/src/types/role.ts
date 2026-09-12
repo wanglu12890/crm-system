@@ -1,7 +1,7 @@
 export type RoleStatus = 0 | 1
 
 export interface Role {
-  id: number
+  id: string
   roleName: string
   roleCode: string
   status: RoleStatus
@@ -16,7 +16,7 @@ export interface RoleSearchCriteria {
 }
 
 export interface RoleFormData {
-  id?: number
+  id?: string
   roleName: string
   roleCode: string
   status: RoleStatus

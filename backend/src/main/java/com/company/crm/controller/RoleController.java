@@ -8,6 +8,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -28,6 +29,14 @@ public class RoleController {
     @GetMapping
     public ResponseEntity<List<RoleListVO>> listRoles() {
         return ResponseEntity.ok(roleService.listRoles());
+    }
+
+    @GetMapping("/{roleId}/permissions")
+    public ResponseEntity<List<String>> getRolePermissionIds(@PathVariable Long roleId) {
+        List<String> permissionIds = roleService.getRolePermissionIds(roleId).stream()
+                .map(String::valueOf)
+                .toList();
+        return ResponseEntity.ok(permissionIds);
     }
 
     @PostMapping

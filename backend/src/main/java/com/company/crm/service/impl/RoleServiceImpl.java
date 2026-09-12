@@ -5,6 +5,7 @@ import com.company.crm.dto.role.CreateRoleDTO;
 import com.company.crm.entity.SysRole;
 import com.company.crm.exception.DuplicateRoleCodeException;
 import com.company.crm.mapper.SysRoleMapper;
+import com.company.crm.mapper.SysRolePermissionMapper;
 import com.company.crm.security.SecurityUser;
 import com.company.crm.service.RoleService;
 import com.company.crm.vo.role.RoleListVO;
@@ -25,11 +26,18 @@ import java.util.List;
 public class RoleServiceImpl implements RoleService {
 
     private final SysRoleMapper sysRoleMapper;
+    private final SysRolePermissionMapper sysRolePermissionMapper;
 
     @Override
     @Transactional(readOnly = true)
     public List<RoleListVO> listRoles() {
         return sysRoleMapper.selectRoleList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<Long> getRolePermissionIds(Long roleId) {
+        return sysRolePermissionMapper.selectEnabledPermissionIdsByRoleId(roleId);
     }
 
     @Override

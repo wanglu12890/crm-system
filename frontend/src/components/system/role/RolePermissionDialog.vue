@@ -1,7 +1,9 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
+import type { TreeInstance } from 'element-plus'
 import type { Role } from '@/types/role'
 import { getPermissionTree } from '@/api/permission';
+import { getRolePermissionIds } from '@/api/role'
 import type { PermissionTreeNode} from '@/types/permission'
 import axios from 'axios';
 import { ApiProblemDetail } from '@/utils/request';
@@ -18,7 +20,7 @@ const emit = defineEmits<{
   save: [permissionCodes: string[]]
 }>()
 
-const treeRef = ref<{ getCheckedKeys: () => Array<string | number> }>()
+const treeRef = ref<TreeInstance>()
 const visible = computed({
   get: () => props.modelValue,
   set: (value: boolean) => emit('update:modelValue', value)
@@ -33,19 +35,26 @@ const treeProps = {
   label: 'permissionName'
 }
 
-const loadPermissionTree = async () => {
+const loadPermissionState = async () => {
+  permissionTree.value = []
+  treeRef.value?.setCheckedKeys([])
+  if (!props.role?.id) return
   loading.value = true
 
   try {
-    const response = await getPermissionTree()
-    permissionTree.value = response.data
+    const permissionTreeResponse = await getPermissionTree()
+    permissionTree.value = permissionTreeResponse.data
+
+    const rolePermissionResponse = await getRolePermissionIds(props.role.id)
+    await nextTick()
+    treeRef.value?.setCheckedKeys(rolePermissionResponse.data)
   } catch (error: unknown) {
     permissionTree.value = []
 
     const detail = axios.isAxiosError<ApiProblemDetail>(error)
       ? error.response?.data?.detail
       : undefined
-    ElMessage.error(detail || '权限树加载失败，请稍后重试')
+    ElMessage.error(detail || '角色权限加载失败，请稍后重试')
   } finally {
     loading.value = false
   }
@@ -54,12 +63,11 @@ const loadPermissionTree = async () => {
 
 
 watch(
-  () => props.modelValue,
-  async(opened) => {
+  () => [props.modelValue, props.role?.id] as const,
+  async([opened]) => {
     if (!opened) return
 
-    await loadPermissionTree()
-    // TODO: 后续加载当前角色已有权限并通过 setCheckedKeys 回显。
+    await loadPermissionState()
   }
 )
 

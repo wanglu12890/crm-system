@@ -5,6 +5,7 @@ import com.company.crm.dto.role.CreateRoleDTO;
 import com.company.crm.entity.SysRole;
 import com.company.crm.exception.DuplicateRoleCodeException;
 import com.company.crm.mapper.SysRoleMapper;
+import com.company.crm.mapper.SysRolePermissionMapper;
 import com.company.crm.security.SecurityUser;
 import com.company.crm.vo.role.RoleListVO;
 import org.junit.jupiter.api.AfterEach;
@@ -33,6 +34,9 @@ class RoleServiceImplTest {
     @Mock
     private SysRoleMapper sysRoleMapper;
 
+    @Mock
+    private SysRolePermissionMapper sysRolePermissionMapper;
+
     @InjectMocks
     private RoleServiceImpl roleService;
 
@@ -50,6 +54,22 @@ class RoleServiceImplTest {
 
         assertThat(roleService.listRoles()).isEqualTo(expected);
         verify(sysRoleMapper).selectRoleList();
+    }
+
+    @Test
+    void shouldReturnRolePermissionIdsFromMapper() {
+        List<Long> expected = List.of(2085985855238352897L, 2085985855238352898L);
+        when(sysRolePermissionMapper.selectEnabledPermissionIdsByRoleId(10L)).thenReturn(expected);
+
+        assertThat(roleService.getRolePermissionIds(10L)).isEqualTo(expected);
+        verify(sysRolePermissionMapper).selectEnabledPermissionIdsByRoleId(10L);
+    }
+
+    @Test
+    void shouldReturnEmptyRolePermissionIds() {
+        when(sysRolePermissionMapper.selectEnabledPermissionIdsByRoleId(10L)).thenReturn(List.of());
+
+        assertThat(roleService.getRolePermissionIds(10L)).isEmpty();
     }
 
     @Test
