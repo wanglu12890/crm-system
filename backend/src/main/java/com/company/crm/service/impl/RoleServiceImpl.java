@@ -3,7 +3,12 @@ package com.company.crm.service.impl;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.company.crm.dto.role.CreateRoleDTO;
 import com.company.crm.entity.SysRole;
+import com.company.crm.entity.SysPermission;
+import com.company.crm.entity.SysRolePermission;
 import com.company.crm.exception.DuplicateRoleCodeException;
+import com.company.crm.exception.InvalidRolePermissionException;
+import com.company.crm.exception.RoleNotFoundException;
+import com.company.crm.mapper.SysPermissionMapper;
 import com.company.crm.mapper.SysRoleMapper;
 import com.company.crm.mapper.SysRolePermissionMapper;
 import com.company.crm.security.SecurityUser;
@@ -18,7 +23,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 
 @Service
 @RequiredArgsConstructor
@@ -27,6 +34,7 @@ public class RoleServiceImpl implements RoleService {
 
     private final SysRoleMapper sysRoleMapper;
     private final SysRolePermissionMapper sysRolePermissionMapper;
+    private final SysPermissionMapper sysPermissionMapper;
 
     @Override
     @Transactional(readOnly = true)
@@ -38,6 +46,77 @@ public class RoleServiceImpl implements RoleService {
     @Transactional(readOnly = true)
     public List<Long> getRolePermissionIds(Long roleId) {
         return sysRolePermissionMapper.selectEnabledPermissionIdsByRoleId(roleId);
+    }
+
+    @Override
+    @Transactional
+    public void updateRolePermissions(Long roleId, List<Long> permissionIds) {
+        String operator = SecurityContextHolder.getContext().getAuthentication().getName();
+        Long roleCount = sysRoleMapper.selectCount(
+                Wrappers.<SysRole>lambdaQuery()
+                        .eq(SysRole::getId, roleId)
+                        .eq(SysRole::getDeleted, 0)
+        );
+        if (roleCount == 0) {
+            log.warn("Update role permissions rejected: role not found, operator={}, roleId={}", operator, roleId);
+            throw new RoleNotFoundException(roleId);
+        }
+
+        List<Long> distinctPermissionIds = new LinkedHashSet<>(permissionIds).stream().toList();
+        validatePermissionIds(roleId, distinctPermissionIds, operator);
+
+        // 对比现有权限和请求权限，若相同则无需更新
+        Set<Long> requestedPermissionIds = new LinkedHashSet<>(distinctPermissionIds);
+        Set<Long> existingPermissionIds = new LinkedHashSet<>(
+                sysRolePermissionMapper.selectEnabledPermissionIdsByRoleId(roleId)
+        );
+        if (existingPermissionIds.equals(requestedPermissionIds)) {
+            return;
+        }
+
+        sysRolePermissionMapper.delete(
+                Wrappers.<SysRolePermission>lambdaQuery()
+                        .eq(SysRolePermission::getRoleId, roleId)
+        );
+        for (Long permissionId : distinctPermissionIds) {
+            SysRolePermission relation = new SysRolePermission();
+            relation.setRoleId(roleId);
+            relation.setPermissionId(permissionId);
+            sysRolePermissionMapper.insert(relation);
+        }
+
+        log.info(
+                "Update role permissions success, operator={}, roleId={}, permissionCount={}",
+                operator, roleId, distinctPermissionIds.size()
+        );
+    }
+
+    private void validatePermissionIds(Long roleId, List<Long> permissionIds, String operator) {
+        if (permissionIds.isEmpty()) {
+            return;
+        }
+        // 查找所有已存在的权限
+        List<SysPermission> validPermissions = sysPermissionMapper.selectList(
+                Wrappers.<SysPermission>lambdaQuery()
+                        .in(SysPermission::getId, permissionIds)
+                        .eq(SysPermission::getStatus, 1)
+        );
+        // 检查权限是否有效
+        Set<Long> validPermissionIds = validPermissions.stream()
+                .map(SysPermission::getId)
+                .collect(java.util.stream.Collectors.toSet());
+        // 检查无效权限
+        List<Long> invalidPermissionIds = permissionIds.stream()
+                .filter(permissionId -> !validPermissionIds.contains(permissionId))
+                .toList();
+        // 若存在无效权限，则抛出异常
+        if (!invalidPermissionIds.isEmpty()) {
+            log.warn(
+                    "Update role permissions rejected: invalid permissions, operator={}, roleId={}, invalidPermissionIds={}",
+                    operator, roleId, invalidPermissionIds
+            );
+            throw new InvalidRolePermissionException(invalidPermissionIds);
+        }
     }
 
     @Override

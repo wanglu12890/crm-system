@@ -3,7 +3,12 @@ package com.company.crm.service.impl;
 import com.baomidou.mybatisplus.core.conditions.Wrapper;
 import com.company.crm.dto.role.CreateRoleDTO;
 import com.company.crm.entity.SysRole;
+import com.company.crm.entity.SysPermission;
+import com.company.crm.entity.SysRolePermission;
 import com.company.crm.exception.DuplicateRoleCodeException;
+import com.company.crm.exception.InvalidRolePermissionException;
+import com.company.crm.exception.RoleNotFoundException;
+import com.company.crm.mapper.SysPermissionMapper;
 import com.company.crm.mapper.SysRoleMapper;
 import com.company.crm.mapper.SysRolePermissionMapper;
 import com.company.crm.security.SecurityUser;
@@ -18,6 +23,7 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
@@ -25,6 +31,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -36,6 +43,9 @@ class RoleServiceImplTest {
 
     @Mock
     private SysRolePermissionMapper sysRolePermissionMapper;
+
+    @Mock
+    private SysPermissionMapper sysPermissionMapper;
 
     @InjectMocks
     private RoleServiceImpl roleService;
@@ -70,6 +80,177 @@ class RoleServiceImplTest {
         when(sysRolePermissionMapper.selectEnabledPermissionIdsByRoleId(10L)).thenReturn(List.of());
 
         assertThat(roleService.getRolePermissionIds(10L)).isEmpty();
+    }
+
+    @Test
+    void shouldReplaceRolePermissions() {
+        authenticate(9L, "admin");
+        when(sysRoleMapper.selectCount(any(Wrapper.class))).thenReturn(1L);
+        when(sysPermissionMapper.selectList(any(Wrapper.class))).thenReturn(List.of(
+                permission(101L, 1), permission(104L, 1)
+        ));
+        when(sysRolePermissionMapper.selectEnabledPermissionIdsByRoleId(10L))
+                .thenReturn(List.of(101L, 102L, 103L));
+
+        roleService.updateRolePermissions(10L, List.of(101L, 104L));
+
+        verify(sysRolePermissionMapper).delete(any(Wrapper.class));
+        var relationCaptor = org.mockito.ArgumentCaptor.forClass(
+                com.company.crm.entity.SysRolePermission.class
+        );
+        verify(sysRolePermissionMapper, times(2)).insert(relationCaptor.capture());
+        assertThat(relationCaptor.getAllValues())
+                .extracting(com.company.crm.entity.SysRolePermission::getPermissionId)
+                .containsExactly(101L, 104L);
+        assertThat(relationCaptor.getAllValues())
+                .allSatisfy(relation -> assertThat(relation.getRoleId()).isEqualTo(10L));
+    }
+
+    @Test
+    void shouldClearAllRolePermissions() {
+        authenticate(9L, "admin");
+        when(sysRoleMapper.selectCount(any(Wrapper.class))).thenReturn(1L);
+        when(sysRolePermissionMapper.selectEnabledPermissionIdsByRoleId(10L))
+                .thenReturn(List.of(101L, 102L));
+
+        roleService.updateRolePermissions(10L, List.of());
+
+        verify(sysRolePermissionMapper).delete(any(Wrapper.class));
+        verify(sysRolePermissionMapper, never()).insert(any(SysRolePermission.class));
+        verify(sysPermissionMapper, never()).selectList(any());
+    }
+
+    @Test
+    void shouldDeduplicatePermissionIdsBeforeInsert() {
+        authenticate(9L, "admin");
+        when(sysRoleMapper.selectCount(any(Wrapper.class))).thenReturn(1L);
+        when(sysPermissionMapper.selectList(any(Wrapper.class))).thenReturn(List.of(
+                permission(101L, 1), permission(102L, 1)
+        ));
+        when(sysRolePermissionMapper.selectEnabledPermissionIdsByRoleId(10L)).thenReturn(List.of());
+
+        roleService.updateRolePermissions(10L, List.of(101L, 101L, 102L));
+
+        verify(sysRolePermissionMapper, times(2)).insert(any(SysRolePermission.class));
+    }
+
+    @Test
+    void shouldRejectInvalidPermissionBeforeDeletingOldRelations() {
+        authenticate(9L, "admin");
+        when(sysRoleMapper.selectCount(any(Wrapper.class))).thenReturn(1L);
+        when(sysPermissionMapper.selectList(any(Wrapper.class))).thenReturn(List.of(permission(101L, 1)));
+
+        assertThatThrownBy(() -> roleService.updateRolePermissions(10L, List.of(101L, 999L)))
+                .isInstanceOf(InvalidRolePermissionException.class);
+        verify(sysRolePermissionMapper, never()).delete(any(Wrapper.class));
+        verify(sysRolePermissionMapper, never()).insert(any(SysRolePermission.class));
+    }
+
+    @Test
+    void shouldRejectDisabledPermissionBeforeDeletingOldRelations() {
+        authenticate(9L, "admin");
+        when(sysRoleMapper.selectCount(any(Wrapper.class))).thenReturn(1L);
+        when(sysPermissionMapper.selectList(any(Wrapper.class))).thenReturn(List.of());
+
+        assertThatThrownBy(() -> roleService.updateRolePermissions(10L, List.of(103L)))
+                .isInstanceOf(InvalidRolePermissionException.class);
+        verify(sysRolePermissionMapper, never()).delete(any(Wrapper.class));
+    }
+
+    @Test
+    void shouldRejectMissingRoleWithoutChangingRelations() {
+        authenticate(9L, "admin");
+        when(sysRoleMapper.selectCount(any(Wrapper.class))).thenReturn(0L);
+
+        assertThatThrownBy(() -> roleService.updateRolePermissions(99L, List.of(101L)))
+                .isInstanceOf(RoleNotFoundException.class);
+        verify(sysPermissionMapper, never()).selectList(any());
+        verify(sysRolePermissionMapper, never()).delete(any(Wrapper.class));
+        verify(sysRolePermissionMapper, never()).insert(any(SysRolePermission.class));
+    }
+
+    @Test
+    void shouldSkipWriteWhenPermissionSetIsExactlyTheSame() {
+        authenticate(9L, "admin");
+        when(sysRoleMapper.selectCount(any(Wrapper.class))).thenReturn(1L);
+        when(sysPermissionMapper.selectList(any(Wrapper.class))).thenReturn(List.of(
+                permission(101L, 1), permission(102L, 1), permission(103L, 1)
+        ));
+        when(sysRolePermissionMapper.selectEnabledPermissionIdsByRoleId(10L))
+                .thenReturn(List.of(101L, 102L, 103L));
+
+        roleService.updateRolePermissions(10L, List.of(101L, 102L, 103L));
+
+        verify(sysRolePermissionMapper, never()).delete(any(Wrapper.class));
+        verify(sysRolePermissionMapper, never()).insert(any(SysRolePermission.class));
+    }
+
+    @Test
+    void shouldSkipWriteWhenOnlyPermissionOrderDiffers() {
+        authenticate(9L, "admin");
+        when(sysRoleMapper.selectCount(any(Wrapper.class))).thenReturn(1L);
+        when(sysPermissionMapper.selectList(any(Wrapper.class))).thenReturn(List.of(
+                permission(101L, 1), permission(102L, 1), permission(103L, 1)
+        ));
+        when(sysRolePermissionMapper.selectEnabledPermissionIdsByRoleId(10L))
+                .thenReturn(List.of(101L, 102L, 103L));
+
+        roleService.updateRolePermissions(10L, List.of(103L, 101L, 102L));
+
+        verify(sysRolePermissionMapper, never()).delete(any(Wrapper.class));
+        verify(sysRolePermissionMapper, never()).insert(any(SysRolePermission.class));
+    }
+
+    @Test
+    void shouldSkipWriteWhenUserRestoresOriginalPermissionSet() {
+        authenticate(9L, "admin");
+        when(sysRoleMapper.selectCount(any(Wrapper.class))).thenReturn(1L);
+        when(sysPermissionMapper.selectList(any(Wrapper.class))).thenReturn(List.of(
+                permission(101L, 1), permission(102L, 1), permission(103L, 1)
+        ));
+        when(sysRolePermissionMapper.selectEnabledPermissionIdsByRoleId(10L))
+                .thenReturn(List.of(101L, 102L, 103L));
+
+        roleService.updateRolePermissions(10L, List.of(101L, 102L, 103L));
+
+        verify(sysRolePermissionMapper, never()).delete(any(Wrapper.class));
+        verify(sysRolePermissionMapper, never()).insert(any(SysRolePermission.class));
+    }
+
+    @Test
+    void shouldSkipWriteWhenExistingAndRequestedPermissionsAreBothEmpty() {
+        authenticate(9L, "admin");
+        when(sysRoleMapper.selectCount(any(Wrapper.class))).thenReturn(1L);
+        when(sysRolePermissionMapper.selectEnabledPermissionIdsByRoleId(10L)).thenReturn(List.of());
+
+        roleService.updateRolePermissions(10L, List.of());
+
+        verify(sysRolePermissionMapper, never()).delete(any(Wrapper.class));
+        verify(sysRolePermissionMapper, never()).insert(any(SysRolePermission.class));
+    }
+
+    @Test
+    void shouldDeclareTransactionForPermissionReplacement() throws NoSuchMethodException {
+        Transactional transactional = RoleServiceImpl.class
+                .getMethod("updateRolePermissions", Long.class, List.class)
+                .getAnnotation(Transactional.class);
+
+        assertThat(transactional).isNotNull();
+    }
+
+    @Test
+    void shouldPropagateInsertFailureSoTransactionCanRollBackDeletedRelations() {
+        authenticate(9L, "admin");
+        when(sysRoleMapper.selectCount(any(Wrapper.class))).thenReturn(1L);
+        when(sysPermissionMapper.selectList(any(Wrapper.class))).thenReturn(List.of(permission(101L, 1)));
+        when(sysRolePermissionMapper.selectEnabledPermissionIdsByRoleId(10L)).thenReturn(List.of());
+        when(sysRolePermissionMapper.insert(any(SysRolePermission.class)))
+                .thenThrow(new RuntimeException("insert failed"));
+
+        assertThatThrownBy(() -> roleService.updateRolePermissions(10L, List.of(101L)))
+                .isInstanceOf(RuntimeException.class)
+                .hasMessage("insert failed");
+        verify(sysRolePermissionMapper).delete(any(Wrapper.class));
     }
 
     @Test
@@ -144,5 +325,12 @@ class RoleServiceImplTest {
         dto.setStatus(status);
         dto.setRemark(remark);
         return dto;
+    }
+
+    private SysPermission permission(Long id, Integer status) {
+        SysPermission permission = new SysPermission();
+        permission.setId(id);
+        permission.setStatus(status);
+        return permission;
     }
 }

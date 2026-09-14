@@ -1,6 +1,7 @@
 package com.company.crm.controller;
 
 import com.company.crm.dto.role.CreateRoleDTO;
+import com.company.crm.dto.role.UpdateRolePermissionsDTO;
 import com.company.crm.service.RoleService;
 import com.company.crm.vo.role.RoleListVO;
 import jakarta.validation.Valid;
@@ -13,6 +14,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.PutMapping;
 
 import java.util.List;
 
@@ -37,6 +39,15 @@ public class RoleController {
                 .map(String::valueOf)
                 .toList();
         return ResponseEntity.ok(permissionIds);
+    }
+
+    @PutMapping("/{roleId}/permissions")
+    public ResponseEntity<Void> updateRolePermissions(
+            @PathVariable Long roleId,
+            @Valid @RequestBody UpdateRolePermissionsDTO dto
+    ) {
+        roleService.updateRolePermissions(roleId, dto.getPermissionIds());
+        return ResponseEntity.noContent().build();
     }
 
     @PostMapping

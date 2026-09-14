@@ -3,7 +3,7 @@ import { computed, nextTick, ref, watch } from 'vue'
 import type { TreeInstance } from 'element-plus'
 import type { Role } from '@/types/role'
 import { getPermissionTree } from '@/api/permission';
-import { getRolePermissionIds } from '@/api/role'
+import { getRolePermissionIds, updateRolePermissions } from '@/api/role'
 import type { PermissionTreeNode} from '@/types/permission'
 import axios from 'axios';
 import { ApiProblemDetail } from '@/utils/request';
@@ -17,7 +17,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   'update:modelValue': [visible: boolean]
-  save: [permissionCodes: string[]]
+  success: []
 }>()
 
 const treeRef = ref<TreeInstance>()
@@ -29,6 +29,19 @@ const visible = computed({
 
 const permissionTree = ref<PermissionTreeNode[]>([])
 const loading = ref(false)
+const saving = ref(false)
+const initialPermissionIds = ref<string[]>([])
+const currentPermissionIds = ref<string[]>([])
+
+const isSamePermissionSet = (left: string[], right: string[]) => {
+  const leftSet = new Set(left)
+  const rightSet = new Set(right)
+  return leftSet.size === rightSet.size && [...leftSet].every((id) => rightSet.has(id))
+}
+
+const hasPermissionChanged = computed(
+  () => !isSamePermissionSet(initialPermissionIds.value, currentPermissionIds.value)
+)
 
 const treeProps = {
   children: 'children',
@@ -38,6 +51,8 @@ const treeProps = {
 const loadPermissionState = async () => {
   permissionTree.value = []
   treeRef.value?.setCheckedKeys([])
+  initialPermissionIds.value = []
+  currentPermissionIds.value = []
   if (!props.role?.id) return
   loading.value = true
 
@@ -48,6 +63,10 @@ const loadPermissionState = async () => {
     const rolePermissionResponse = await getRolePermissionIds(props.role.id)
     await nextTick()
     treeRef.value?.setCheckedKeys(rolePermissionResponse.data)
+    await nextTick()
+    const checkedIds = (treeRef.value?.getCheckedKeys() || []).map(String)
+    initialPermissionIds.value = [...checkedIds]
+    currentPermissionIds.value = [...checkedIds]
   } catch (error: unknown) {
     permissionTree.value = []
 
@@ -65,15 +84,37 @@ const loadPermissionState = async () => {
 watch(
   () => [props.modelValue, props.role?.id] as const,
   async([opened]) => {
-    if (!opened) return
+    if (!opened) {
+      initialPermissionIds.value = []
+      currentPermissionIds.value = []
+      return
+    }
 
     await loadPermissionState()
   }
 )
 
-const handleSave = () => {
-  const checkedKeys = treeRef.value?.getCheckedKeys() || []
-  emit('save', checkedKeys.map(String).filter((key) => key.includes(':')))
+const handlePermissionCheck = () => {
+  currentPermissionIds.value = (treeRef.value?.getCheckedKeys() || []).map(String)
+}
+
+const handleSave = async () => {
+  if (!props.role?.id || saving.value || !hasPermissionChanged.value) return
+  const permissionIds = [...currentPermissionIds.value]
+  saving.value = true
+  try {
+    await updateRolePermissions(props.role.id, { permissionIds })
+    ElMessage.success('权限保存成功')
+    visible.value = false
+    emit('success')
+  } catch (error: unknown) {
+    const detail = axios.isAxiosError<ApiProblemDetail>(error)
+      ? error.response?.data?.detail
+      : undefined
+    ElMessage.error(detail || '权限保存失败，请稍后重试')
+  } finally {
+    saving.value = false
+  }
 }
 </script>
 
@@ -99,12 +140,20 @@ const handleSave = () => {
         show-checkbox
         default-expand-all
         :props="treeProps"
+        @check="handlePermissionCheck"
       />
     </div>
 
     <template #footer>
-      <el-button @click="visible = false">取消</el-button>
-      <el-button type="primary" @click="handleSave">保存权限</el-button>
+      <el-button :disabled="saving" @click="visible = false">取消</el-button>
+      <el-button
+        type="primary"
+        :loading="saving"
+        :disabled="loading || !hasPermissionChanged || saving"
+        @click="handleSave"
+      >
+        保存权限
+      </el-button>
     </template>
   </el-dialog>
 </template>

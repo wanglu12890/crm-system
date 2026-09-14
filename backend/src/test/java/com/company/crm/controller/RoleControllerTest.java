@@ -2,6 +2,7 @@ package com.company.crm.controller;
 
 import com.company.crm.config.SecurityConfig;
 import com.company.crm.exception.DuplicateRoleCodeException;
+import com.company.crm.exception.InvalidRolePermissionException;
 import com.company.crm.security.CustomUserDetailsService;
 import com.company.crm.security.JwtAuthenticationFilter;
 import com.company.crm.security.JwtService;
@@ -19,10 +20,13 @@ import org.springframework.test.web.servlet.MockMvc;
 import java.util.List;
 
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.never;
 import static org.mockito.ArgumentMatchers.any;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -101,6 +105,70 @@ class RoleControllerTest {
         mockMvc.perform(get("/roles/10/permissions").with(user("admin")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$").isEmpty());
+    }
+
+    @Test
+    void shouldUpdateRolePermissions() throws Exception {
+        mockMvc.perform(put("/roles/10/permissions")
+                        .with(user("admin"))
+                        .contentType("application/json")
+                        .content("""
+                                {
+                                  "permissionIds": [
+                                    "2085985855238352897",
+                                    "2085985855238352898"
+                                  ]
+                                }
+                                """))
+                .andExpect(status().isNoContent());
+
+        verify(roleService).updateRolePermissions(
+                10L,
+                List.of(2085985855238352897L, 2085985855238352898L)
+        );
+    }
+
+    @Test
+    void shouldAllowClearingRolePermissions() throws Exception {
+        mockMvc.perform(put("/roles/10/permissions")
+                        .with(user("admin"))
+                        .contentType("application/json")
+                        .content("{\"permissionIds\": []}"))
+                .andExpect(status().isNoContent());
+
+        verify(roleService).updateRolePermissions(10L, List.of());
+    }
+
+    @Test
+    void shouldRejectNullPermissionIds() throws Exception {
+        mockMvc.perform(put("/roles/10/permissions")
+                        .with(user("admin"))
+                        .contentType("application/json")
+                        .content("{\"permissionIds\": null}"))
+                .andExpect(status().isBadRequest());
+
+        verify(roleService, never()).updateRolePermissions(any(), any());
+    }
+
+    @Test
+    void shouldRejectAnonymousPermissionUpdate() throws Exception {
+        mockMvc.perform(put("/roles/10/permissions")
+                        .contentType("application/json")
+                        .content("{\"permissionIds\": []}"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void shouldReturnBadRequestForInvalidPermission() throws Exception {
+        org.mockito.Mockito.doThrow(new InvalidRolePermissionException(List.of(999L)))
+                .when(roleService).updateRolePermissions(10L, List.of(999L));
+
+        mockMvc.perform(put("/roles/10/permissions")
+                        .with(user("admin"))
+                        .contentType("application/json")
+                        .content("{\"permissionIds\": [\"999\"]}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_PERMISSION"));
     }
 
     @Test

@@ -16,4 +16,23 @@ public class RoleExceptionHandler {
         problem.setProperty("code", "ROLE_CODE_ALREADY_EXISTS");
         return ResponseEntity.status(HttpStatus.CONFLICT).body(problem);
     }
+
+    @ExceptionHandler(RoleNotFoundException.class)
+    public ResponseEntity<ProblemDetail> handleRoleNotFound(RoleNotFoundException exception) {
+        return problem(HttpStatus.NOT_FOUND, "角色权限保存失败", exception.getMessage(), "ROLE_NOT_FOUND");
+    }
+
+    @ExceptionHandler(InvalidRolePermissionException.class)
+    public ResponseEntity<ProblemDetail> handleInvalidRolePermission(InvalidRolePermissionException exception) {
+        return problem(HttpStatus.BAD_REQUEST, "角色权限保存失败", exception.getMessage(), "INVALID_PERMISSION");
+    }
+
+    private ResponseEntity<ProblemDetail> problem(
+            HttpStatus status, String title, String detail, String code
+    ) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(status, detail);
+        problem.setTitle(title);
+        problem.setProperty("code", code);
+        return ResponseEntity.status(status).body(problem);
+    }
 }

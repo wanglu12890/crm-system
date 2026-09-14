@@ -11,5 +11,7 @@ public interface RoleService {
 
     List<Long> getRolePermissionIds(Long roleId);
 
+    void updateRolePermissions(Long roleId, List<Long> permissionIds);
+
     Long createRole(CreateRoleDTO dto);
 }

@@ -25,4 +25,8 @@ export interface RoleFormData {
 
 export type CreateRoleRequest = Omit<RoleFormData, 'id'>
 
+export interface UpdateRolePermissionsRequest {
+  permissionIds: string[]
+}
+
 export type RoleDialogMode = 'create' | 'edit'

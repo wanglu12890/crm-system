@@ -102,12 +102,6 @@ const handleConfigurePermission = (role: Role) => {
   permissionDialogVisible.value = true
 }
 
-const handleSavePermission = (_permissionCodes: string[]) => {
-  // TODO: 后续接入角色权限保存接口。
-  ElMessage.info('权限配置功能待后端接口完成后接入')
-  permissionDialogVisible.value = false
-}
-
 const handleSizeChange = (size: number) => {
   pageSize.value = size
   currentPage.value = 1
@@ -162,7 +156,7 @@ const handleSizeChange = (size: number) => {
     <RolePermissionDialog
       v-model="permissionDialogVisible"
       :role="permissionRole"
-      @save="handleSavePermission"
+      @success="loadRoles"
     />
   </section>
 </template>
