@@ -4,9 +4,11 @@
 // 什么是 type 类型？type 类型用于定义 TypeScript 中的类型别名
 import { reactive, watch } from 'vue'
 import type { UserSearchCriteria } from '@/types/user'
+import type { Role } from '@/types/role'
 
 const props = defineProps<{
   modelValue: UserSearchCriteria
+  roles: Role[]
 }>()
 
 const emit = defineEmits<{
@@ -47,9 +49,7 @@ const handleReset = () => {
 
       <el-form-item label="角色">
         <el-select v-model="searchForm.role" placeholder="全部角色" clearable>
-          <el-option label="管理员" value="管理员" />
-          <el-option label="销售经理" value="销售经理" />
-          <el-option label="销售人员" value="销售人员" />
+          <el-option v-for="role in roles" :key="role.id" :label="role.roleName" :value="role.id" />
         </el-select>
       </el-form-item>
 

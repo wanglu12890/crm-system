@@ -73,7 +73,7 @@ public interface SysUserMapper extends BaseMapper<SysUser> {
                         SELECT CAST(u.id AS CHAR) AS id,
                                u.username,
                                u.real_name AS name,
-                               COALESCE(GROUP_CONCAT(DISTINCT r.role_name ORDER BY r.id SEPARATOR '、'), '未分配') AS role,
+                               COALESCE(GROUP_CONCAT(DISTINCT CAST(r.id AS CHAR) ORDER BY r.id SEPARATOR ','), '') AS roleIds,
                                COALESCE(u.mobile, '') AS phone,
                                CASE u.status WHEN 1 THEN '正常' ELSE '停用' END AS status,
                                DATE_FORMAT(u.created_at, '%Y-%m-%d') AS createTime

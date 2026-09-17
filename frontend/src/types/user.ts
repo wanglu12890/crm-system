@@ -5,10 +5,10 @@ export type UserStatus = '正常' | '停用'
 
 // 定义 User 的接口，它描述了用户对象的结构，包括 id、username、name、role、phone、status 和 createTime 等属性。
 export interface User {
-  id: number
+  id: string
   username: string
   name: string
-  role: string
+  roleIds: string[]
   phone: string
   status: UserStatus
   createTime: string
@@ -21,13 +21,21 @@ export interface UserSearchCriteria {
 }
 // 定义 UserFormData 的接口，它描述了用户表单数据的结构，包括 id、username、name、password、role、phone 和 status 等属性。id 属性是可选的，status 属性是 UserStatus 类型。
 export interface UserFormData {
-  id?: number
+  id?: string
   username: string
   name: string
   password: string
-  role: string
+  roleIds: string[]
   phone: string
   status: UserStatus
+}
+export interface CreateUserRequest {
+  username: string
+  realName: string
+  password: string
+  phone?: string
+  status: 0 | 1
+  roleIds: string[]
 }
 
 // 定义 UserDialogMode 的类型，它可以是字符串 'create' 或 'edit'，用于表示用户对话框的模式。

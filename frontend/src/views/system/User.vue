@@ -6,7 +6,9 @@ import UserDialog from '@/components/system/user/UserDialog.vue'
 import UserSearch from '@/components/system/user/UserSearch.vue'
 import UserTable from '@/components/system/user/UserTable.vue'
 import { getUserList } from '@/api/user'
+import { getRoleList } from '@/api/role'
 import { ApiProblemDetail } from '@/utils/request'
+import type { Role } from '@/types/role'
 import type {
   User,
   UserDialogMode,
@@ -15,6 +17,7 @@ import type {
 } from '@/types/user'
 
 const users = ref<User[]>([])
+const roles = ref<Role[]>([])
 const loading = ref(false)
 const loadUsers = async () => {
   loading.value = true
@@ -31,6 +34,20 @@ const loadUsers = async () => {
   }
 }
 onMounted(loadUsers)
+
+const loadRoles = async () => {
+  try {
+    const response = await getRoleList()
+    roles.value = response.data
+  } catch (error: unknown) {
+    const detail = axios.isAxiosError<ApiProblemDetail>(error)
+      ? error.response?.data?.detail
+      : undefined
+    ElMessage.error(detail || '角色列表加载失败，请稍后重试')
+    roles.value = []
+  }
+}
+onMounted(loadRoles)
 
 // 定义搜索条件的响应式对象，初始值为空
 const searchCriteria = ref<UserSearchCriteria>({
@@ -56,7 +73,8 @@ const filteredUsers = computed(() => {
   const keyword = searchCriteria.value.username.toLowerCase()
   return users.value.filter((user) => {
     const matchesUsername = !keyword || user.username.toLowerCase().includes(keyword)
-    const matchesRole = !searchCriteria.value.role || user.role === searchCriteria.value.role
+    const matchesRole =
+      !searchCriteria.value.role || user.roleIds.includes(searchCriteria.value.role)
     const matchesStatus =
       !searchCriteria.value.status || user.status === searchCriteria.value.status
     return matchesUsername && matchesRole && matchesStatus
@@ -93,63 +111,23 @@ const handleEdit = (user: User) => {
 
 const handleDelete = async (user: User) => {
   try {
-    await ElMessageBox.confirm(`确定删除用户“${user.username}”吗？`, '删除确认', {
-      type: 'warning',
-      confirmButtonText: '确定',
-      cancelButtonText: '取消'
-    })
-    users.value = users.value.filter((item) => item.id !== user.id)
+    // await ElMessageBox.confirm(`确定删除用户“${user.username}”吗？`, '删除确认', {
+    //   type: 'warning',
+    //   confirmButtonText: '确定',
+    //   cancelButtonText: '取消'
+    // })
+    // users.value = users.value.filter((item) => item.id !== user.id)
 
-    const maxPage = Math.max(1, Math.ceil(filteredUsers.value.length / pageSize.value))
-    currentPage.value = Math.min(currentPage.value, maxPage)
-    ElMessage.success('删除成功')
+    // const maxPage = Math.max(1, Math.ceil(filteredUsers.value.length / pageSize.value))
+    // currentPage.value = Math.min(currentPage.value, maxPage)
+    // ElMessage.success('删除成功')
   } catch {
     // 用户取消删除时保持当前数据不变。
   }
 }
 
-const formatDate = (date: Date) => {
-  const year = date.getFullYear()
-  const month = String(date.getMonth() + 1).padStart(2, '0')
-  const day = String(date.getDate()).padStart(2, '0')
-  return `${year}-${month}-${day}`
-}
-
-const handleSave = (data: UserFormData) => {
-  if (dialogMode.value === 'create') {
-    const usernameExists = users.value.some((user) => user.username === data.username)
-    if (usernameExists) {
-      ElMessage.warning('用户名已存在')
-      return
-    }
-
-    const nextId = users.value.reduce((maxId, user) => Math.max(maxId, user.id), 0) + 1
-    users.value.unshift({
-      id: nextId,
-      username: data.username,
-      name: data.name,
-      role: data.role,
-      phone: data.phone,
-      status: data.status,
-      createTime: formatDate(new Date())
-    })
-    currentPage.value = 1
-    ElMessage.success('新增成功')
-  } else if (data.id) {
-    const index = users.value.findIndex((user) => user.id === data.id)
-    if (index >= 0) {
-      users.value[index] = {
-        ...users.value[index],
-        username: data.username,
-        name: data.name,
-        role: data.role,
-        phone: data.phone,
-        status: data.status
-      }
-      ElMessage.success('编辑成功')
-    }
-  }
-
+const handleSuccess = async () => {
+  await loadUsers() // 重新加载用户列表以获取最新数据
   dialogVisible.value = false
 }
 
@@ -170,7 +148,8 @@ const handleSizeChange = (size: number) => {
 
     <!-- 用户搜索组件 -->
     <UserSearch
-      :model-value="searchCriteria" 
+      :model-value="searchCriteria"
+      :roles="roles"
       @search="handleSearch"
       @reset="handleReset"
     />
@@ -181,7 +160,12 @@ const handleSizeChange = (size: number) => {
     </div>
 
     <!-- 用户表格组件 -->
-    <UserTable :users="paginatedUsers" @edit="handleEdit" @delete="handleDelete" />
+    <UserTable
+      :users="paginatedUsers"
+      :roles="roles"
+      @edit="handleEdit"
+      @delete="handleDelete"
+    />
 
     <!-- 用户分页组件 -->
     <div class="user-page__pagination">
@@ -201,7 +185,8 @@ const handleSizeChange = (size: number) => {
       v-model="dialogVisible"
       :mode="dialogMode"
       :user="editingUser"
-      @save="handleSave"
+      :roles="roles"
+      @success="handleSuccess"     
     />
   </section>
 </template>
