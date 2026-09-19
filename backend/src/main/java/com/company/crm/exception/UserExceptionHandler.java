@@ -19,6 +19,13 @@ public class UserExceptionHandler {
         return problem(HttpStatus.BAD_REQUEST, exception.getMessage(), "INVALID_ROLE");
     }
 
+    @ExceptionHandler(ForbiddenRoleAssignmentException.class)
+    public ResponseEntity<ProblemDetail> handleForbiddenRoleAssignment(
+            ForbiddenRoleAssignmentException exception
+    ) {
+        return problem(HttpStatus.FORBIDDEN, exception.getMessage(), "ROLE_ASSIGNMENT_FORBIDDEN");
+    }
+
     private ResponseEntity<ProblemDetail> problem(HttpStatus status, String detail, String code) {
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(status, detail);
         problem.setTitle("用户创建失败");

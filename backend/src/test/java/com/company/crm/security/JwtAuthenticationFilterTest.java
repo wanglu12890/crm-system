@@ -43,6 +43,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         JwtAuthenticationFilter.class,
         JwtService.class,
         RestAuthenticationEntryPoint.class,
+        RestAccessDeniedHandler.class,
         AuthExceptionHandler.class,
         JwtAuthenticationFilterTest.ProtectedTestController.class
 })

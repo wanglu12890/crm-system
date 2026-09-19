@@ -3,6 +3,7 @@ package com.company.crm.config;
 import com.company.crm.security.CustomUserDetailsService;
 import com.company.crm.security.JwtAuthenticationFilter;
 import com.company.crm.security.RestAuthenticationEntryPoint;
+import com.company.crm.security.RestAccessDeniedHandler;
 import jakarta.servlet.DispatcherType;
 
 import javax.swing.Spring;
@@ -15,6 +16,7 @@ import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.ProviderManager;
 import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
 import org.springframework.security.config.Customizer;
+import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
@@ -25,6 +27,7 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 // 类 SecurityConfig 是一个配置类，用于配置 Spring Security 的相关设置。里面包含了多个方法，用于配置不同的安全设置。
 // Spring 启动时读取这个类，并根据里面定义的 Bean 组装认证和安全过滤链。
 @Configuration
+@EnableMethodSecurity
 public class SecurityConfig {
 
         // 创建了一个名为 authenticationProvider 的 Bean，用于组装一个 DaoAuthenticationProvider，它内部需要两个核心东西：
@@ -89,7 +92,8 @@ public class SecurityConfig {
             HttpSecurity http,
             DaoAuthenticationProvider authenticationProvider,
             JwtAuthenticationFilter jwtAuthenticationFilter,
-            RestAuthenticationEntryPoint authenticationEntryPoint
+            RestAuthenticationEntryPoint authenticationEntryPoint,
+            RestAccessDeniedHandler accessDeniedHandler
     ) throws Exception {
         return http
                 .csrf(AbstractHttpConfigurer::disable)  // 禁用 CSRF 当前采用前后端分离 + Bearer JWT 无状态认证，不依赖 Cookie Session，因此关闭 CSRF。
@@ -100,7 +104,9 @@ public class SecurityConfig {
                 .logout(AbstractHttpConfigurer::disable) // 禁用 Spring Security 默认的 Session Logout 机制。
                 .requestCache(AbstractHttpConfigurer::disable)  // 不保存“用户认证前原本想访问哪个页面”的请求。
                 .authenticationProvider(authenticationProvider) // 配置认证提供者，前面创建的：DaoAuthenticationProvider正式注册给 Spring Security。
-                .exceptionHandling(exceptions -> exceptions.authenticationEntryPoint(authenticationEntryPoint)) // 当未认证用户访问受保护接口时，调用 RestAuthenticationEntryPoint 返回统一 401 JSON。
+                .exceptionHandling(exceptions -> exceptions
+                        .authenticationEntryPoint(authenticationEntryPoint)
+                        .accessDeniedHandler(accessDeniedHandler))
                 .authorizeHttpRequests(authorize -> authorize
                         .dispatcherTypeMatchers(DispatcherType.ERROR).permitAll()  // 放行 Servlet 容器内部的 ERROR 类型派发，防止原本的 404/500 错误在内部二次派发时，又被 Spring Security 拦截成 401。
                         .requestMatchers(HttpMethod.POST, "/auth/login").permitAll()  // 登录接口公开访问

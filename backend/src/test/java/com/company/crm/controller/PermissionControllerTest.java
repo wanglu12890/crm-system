@@ -5,6 +5,7 @@ import com.company.crm.security.CustomUserDetailsService;
 import com.company.crm.security.JwtAuthenticationFilter;
 import com.company.crm.security.JwtService;
 import com.company.crm.security.RestAuthenticationEntryPoint;
+import com.company.crm.security.RestAccessDeniedHandler;
 import com.company.crm.service.PermissionService;
 import com.company.crm.vo.permission.PermissionTreeVO;
 import org.junit.jupiter.api.Test;
@@ -13,11 +14,14 @@ import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.context.annotation.Import;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.util.List;
 
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.never;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -27,7 +31,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @Import({
         SecurityConfig.class,
         JwtAuthenticationFilter.class,
-        RestAuthenticationEntryPoint.class
+        RestAuthenticationEntryPoint.class,
+        RestAccessDeniedHandler.class
 })
 class PermissionControllerTest {
 
@@ -64,7 +69,8 @@ class PermissionControllerTest {
         root.getChildren().add(child);
         when(permissionService.getPermissionTree()).thenReturn(List.of(root));
 
-        mockMvc.perform(get("/permissions").with(user("admin")))
+        mockMvc.perform(get("/permissions").with(user("admin").authorities(
+                        new SimpleGrantedAuthority("permission:list"))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].id").value("1"))
                 .andExpect(jsonPath("$[0].parentId").value("0"))
@@ -83,6 +89,13 @@ class PermissionControllerTest {
                 .andExpect(jsonPath("$[0].children[0].sortOrder").value(1))
                 .andExpect(jsonPath("$[0].children[0].children").isArray())
                 .andExpect(jsonPath("$[0].children[0].children").isEmpty());
+    }
+
+    @Test
+    void shouldRejectPermissionTreeWithoutAuthority() throws Exception {
+        mockMvc.perform(get("/permissions").with(user("admin")))
+                .andExpect(status().isForbidden());
+        verify(permissionService, never()).getPermissionTree();
     }
 
     private PermissionTreeVO node(

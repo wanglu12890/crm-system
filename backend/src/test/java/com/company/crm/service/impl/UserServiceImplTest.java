@@ -7,6 +7,7 @@ import com.company.crm.entity.SysUser;
 import com.company.crm.entity.SysUserRole;
 import com.company.crm.exception.DuplicateUsernameException;
 import com.company.crm.exception.InvalidUserRoleException;
+import com.company.crm.exception.ForbiddenRoleAssignmentException;
 import com.company.crm.mapper.SysRoleMapper;
 import com.company.crm.mapper.SysUserMapper;
 import com.company.crm.mapper.SysUserRoleMapper;
@@ -144,6 +145,62 @@ class UserServiceImplTest {
                 .isAnnotationPresent(Transactional.class)).isTrue();
     }
 
+    @Test
+    void shouldAllowSuperAdminToAssignSystemAdmin() {
+        authenticate(List.of("SUPER_ADMIN"));
+        when(sysRoleMapper.selectList(any(Wrapper.class)))
+                .thenReturn(List.of(role(101L, "SYSTEM_ADMIN")));
+        when(passwordEncoder.encode(any())).thenReturn("hash");
+        assignUserIdOnInsert(201L);
+
+        userService.createUser(dto(List.of(101L)));
+
+        verify(sysUserMapper).insert(any(SysUser.class));
+        verify(sysUserRoleMapper).insert(any(SysUserRole.class));
+    }
+
+    @Test
+    void shouldAllowSystemAdminToAssignSalesManager() {
+        assertSystemAdminCanAssign("SALES_MANAGER");
+    }
+
+    @Test
+    void shouldAllowSystemAdminToAssignSalesStaff() {
+        assertSystemAdminCanAssign("SALES_STAFF");
+    }
+
+    @Test
+    void shouldRejectSystemAdminAssigningSuperAdmin() {
+        assertSystemAdminCannotAssign(List.of(role(101L, "SUPER_ADMIN")), List.of(101L));
+    }
+
+    @Test
+    void shouldRejectSystemAdminAssigningSystemAdmin() {
+        assertSystemAdminCannotAssign(List.of(role(101L, "SYSTEM_ADMIN")), List.of(101L));
+    }
+
+    @Test
+    void shouldRejectWholeRequestWhenAnyRoleIsOutOfScope() {
+        assertSystemAdminCannotAssign(
+                List.of(role(101L, "SALES_MANAGER"), role(102L, "SUPER_ADMIN")),
+                List.of(101L, 102L)
+        );
+    }
+
+    @Test
+    void shouldGiveSuperAdminPrecedenceWhenOperatorHasMultipleRoles() {
+        authenticate(List.of("SYSTEM_ADMIN", "SUPER_ADMIN", "SALES_MANAGER"));
+        when(sysRoleMapper.selectList(any(Wrapper.class)))
+                .thenReturn(List.of(role(101L, "SUPER_ADMIN")));
+        when(passwordEncoder.encode(any())).thenReturn("hash");
+        assignUserIdOnInsert(201L);
+
+        userService.createUser(dto(List.of(101L)));
+
+        verify(sysUserMapper).insert(any(SysUser.class));
+        verify(sysUserRoleMapper).insert(any(SysUserRole.class));
+    }
+
     private void assignUserIdOnInsert(Long id) {
         doAnswer(invocation -> {
             invocation.<SysUser>getArgument(0).setId(id);
@@ -152,8 +209,12 @@ class UserServiceImplTest {
     }
 
     private void authenticate() {
+        authenticate(List.of("SUPER_ADMIN"));
+    }
+
+    private void authenticate(List<String> roles) {
         SecurityUser principal = new SecurityUser(9L, "admin", "hash", "管理员", 1, 0,
-                List.of("SUPER_ADMIN"), List.of(), List.of());
+                roles, List.of(), List.of());
         SecurityContextHolder.getContext().setAuthentication(
                 new UsernamePasswordAuthenticationToken(principal, null, principal.getAuthorities()));
     }
@@ -170,10 +231,40 @@ class UserServiceImplTest {
     }
 
     private SysRole role(Long id) {
+        return role(id, "SALES_STAFF");
+    }
+
+    private SysRole role(Long id, String roleCode) {
         SysRole role = new SysRole();
         role.setId(id);
+        role.setRoleCode(roleCode);
         role.setStatus(1);
         role.setDeleted(0);
         return role;
+    }
+
+    private void assertSystemAdminCanAssign(String roleCode) {
+        authenticate(List.of("SYSTEM_ADMIN"));
+        when(sysRoleMapper.selectList(any(Wrapper.class)))
+                .thenReturn(List.of(role(101L, roleCode)));
+        when(passwordEncoder.encode(any())).thenReturn("hash");
+        assignUserIdOnInsert(201L);
+
+        userService.createUser(dto(List.of(101L)));
+
+        verify(sysUserMapper).insert(any(SysUser.class));
+        verify(sysUserRoleMapper).insert(any(SysUserRole.class));
+    }
+
+    private void assertSystemAdminCannotAssign(List<SysRole> roles, List<Long> roleIds) {
+        authenticate(List.of("SYSTEM_ADMIN"));
+        when(sysRoleMapper.selectList(any(Wrapper.class))).thenReturn(roles);
+
+        assertThatThrownBy(() -> userService.createUser(dto(roleIds)))
+                .isInstanceOf(ForbiddenRoleAssignmentException.class);
+
+        verify(passwordEncoder, never()).encode(any());
+        verify(sysUserMapper, never()).insert(any(SysUser.class));
+        verify(sysUserRoleMapper, never()).insert(any(SysUserRole.class));
     }
 }

@@ -63,6 +63,7 @@ public interface SysUserMapper extends BaseMapper<SysUser> {
               JOIN sys_permission p ON rp.permission_id = p.id
               WHERE ur.user_id = #{userId}
               AND r.status = 1
+              AND r.deleted = 0
               AND p.status = 1
               ORDER BY p.permission_code
               """)

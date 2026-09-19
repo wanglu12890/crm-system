@@ -6,6 +6,7 @@ import com.company.crm.security.CustomUserDetailsService;
 import com.company.crm.security.JwtAuthenticationFilter;
 import com.company.crm.security.JwtService;
 import com.company.crm.security.RestAuthenticationEntryPoint;
+import com.company.crm.security.RestAccessDeniedHandler;
 import com.company.crm.security.SecurityUser;
 import com.company.crm.service.AuthService;
 import com.company.crm.vo.auth.TokenVO;
@@ -35,6 +36,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         SecurityConfig.class,
         JwtAuthenticationFilter.class,
         RestAuthenticationEntryPoint.class,
+        RestAccessDeniedHandler.class,
         AuthExceptionHandler.class
 })
 class AuthControllerTest {
