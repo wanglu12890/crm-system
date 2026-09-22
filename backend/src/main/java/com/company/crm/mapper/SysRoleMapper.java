@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.company.crm.entity.SysRole;
 import com.company.crm.vo.role.RoleListVO;
 import org.apache.ibatis.annotations.Mapper;
+import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
 
 import java.util.List;
@@ -29,4 +30,12 @@ public interface SysRoleMapper extends BaseMapper<SysRole> {
              ORDER BY r.id ASC
             """)
     List<RoleListVO> selectRoleList();
+
+    @Select("""
+            SELECT role_code
+              FROM sys_role
+             WHERE id = #{roleId}
+               AND deleted = 0
+            """)
+    String selectRoleCodeById(@Param("roleId") Long roleId);
 }

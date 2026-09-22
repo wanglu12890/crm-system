@@ -36,7 +36,7 @@ public class RoleController {
     }
 
     @GetMapping("/{roleId}/permissions")
-    @PreAuthorize("hasAuthority('role:assign_permission')")
+    @PreAuthorize("hasRole('SUPER_ADMIN') and hasAuthority('role:assign_permission')")
     public ResponseEntity<List<String>> getRolePermissionIds(@PathVariable Long roleId) {
         List<String> permissionIds = roleService.getRolePermissionIds(roleId).stream()
                 .map(String::valueOf)
@@ -45,7 +45,7 @@ public class RoleController {
     }
 
     @PutMapping("/{roleId}/permissions")
-    @PreAuthorize("hasAuthority('role:assign_permission')")
+    @PreAuthorize("hasRole('SUPER_ADMIN') and hasAuthority('role:assign_permission')")
     public ResponseEntity<Void> updateRolePermissions(
             @PathVariable Long roleId,
             @Valid @RequestBody UpdateRolePermissionsDTO dto
@@ -55,7 +55,7 @@ public class RoleController {
     }
 
     @PostMapping
-    @PreAuthorize("hasAuthority('role:create')")
+    @PreAuthorize("hasRole('SUPER_ADMIN') and hasAuthority('role:create')")
     public ResponseEntity<Long> createRole(@Valid @RequestBody CreateRoleDTO dto) {
         return ResponseEntity.status(HttpStatus.CREATED).body(roleService.createRole(dto));
     }

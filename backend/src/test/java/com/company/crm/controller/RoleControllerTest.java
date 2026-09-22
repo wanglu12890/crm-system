@@ -2,6 +2,8 @@ package com.company.crm.controller;
 
 import com.company.crm.config.SecurityConfig;
 import com.company.crm.exception.DuplicateRoleCodeException;
+import com.company.crm.exception.ForbiddenRoleCreationException;
+import com.company.crm.exception.ForbiddenRolePermissionException;
 import com.company.crm.exception.InvalidRolePermissionException;
 import com.company.crm.security.CustomUserDetailsService;
 import com.company.crm.security.JwtAuthenticationFilter;
@@ -97,6 +99,7 @@ class RoleControllerTest {
         ));
 
         mockMvc.perform(get("/roles/{roleId}/permissions", roleId).with(user("admin").authorities(
+                        new SimpleGrantedAuthority("ROLE_SUPER_ADMIN"),
                         new SimpleGrantedAuthority("role:assign_permission"))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0]").value("2085985855238352897"))
@@ -108,6 +111,7 @@ class RoleControllerTest {
         when(roleService.getRolePermissionIds(10L)).thenReturn(List.of());
 
         mockMvc.perform(get("/roles/10/permissions").with(user("admin").authorities(
+                        new SimpleGrantedAuthority("ROLE_SUPER_ADMIN"),
                         new SimpleGrantedAuthority("role:assign_permission"))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$").isEmpty());
@@ -116,7 +120,9 @@ class RoleControllerTest {
     @Test
     void shouldUpdateRolePermissions() throws Exception {
         mockMvc.perform(put("/roles/10/permissions")
-                        .with(user("admin").authorities(new SimpleGrantedAuthority("role:assign_permission")))
+                        .with(user("admin").authorities(
+                                new SimpleGrantedAuthority("ROLE_SUPER_ADMIN"),
+                                new SimpleGrantedAuthority("role:assign_permission")))
                         .contentType("application/json")
                         .content("""
                                 {
@@ -137,7 +143,9 @@ class RoleControllerTest {
     @Test
     void shouldAllowClearingRolePermissions() throws Exception {
         mockMvc.perform(put("/roles/10/permissions")
-                        .with(user("admin").authorities(new SimpleGrantedAuthority("role:assign_permission")))
+                        .with(user("admin").authorities(
+                                new SimpleGrantedAuthority("ROLE_SUPER_ADMIN"),
+                                new SimpleGrantedAuthority("role:assign_permission")))
                         .contentType("application/json")
                         .content("{\"permissionIds\": []}"))
                 .andExpect(status().isNoContent());
@@ -148,7 +156,9 @@ class RoleControllerTest {
     @Test
     void shouldRejectNullPermissionIds() throws Exception {
         mockMvc.perform(put("/roles/10/permissions")
-                        .with(user("admin").authorities(new SimpleGrantedAuthority("role:assign_permission")))
+                        .with(user("admin").authorities(
+                                new SimpleGrantedAuthority("ROLE_SUPER_ADMIN"),
+                                new SimpleGrantedAuthority("role:assign_permission")))
                         .contentType("application/json")
                         .content("{\"permissionIds\": null}"))
                 .andExpect(status().isBadRequest());
@@ -170,7 +180,9 @@ class RoleControllerTest {
                 .when(roleService).updateRolePermissions(10L, List.of(999L));
 
         mockMvc.perform(put("/roles/10/permissions")
-                        .with(user("admin").authorities(new SimpleGrantedAuthority("role:assign_permission")))
+                        .with(user("admin").authorities(
+                                new SimpleGrantedAuthority("ROLE_SUPER_ADMIN"),
+                                new SimpleGrantedAuthority("role:assign_permission")))
                         .contentType("application/json")
                         .content("{\"permissionIds\": [\"999\"]}"))
                 .andExpect(status().isBadRequest())
@@ -178,11 +190,54 @@ class RoleControllerTest {
     }
 
     @Test
+    void shouldRejectSystemAdminPermissionUpdateEvenWhenAuthorityWasAssigned() throws Exception {
+        mockMvc.perform(put("/roles/10/permissions")
+                        .with(user("system-admin").authorities(
+                                new SimpleGrantedAuthority("ROLE_SYSTEM_ADMIN"),
+                                new SimpleGrantedAuthority("role:assign_permission")))
+                        .contentType("application/json")
+                        .content("{\"permissionIds\": []}"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("FORBIDDEN"));
+        verify(roleService, never()).updateRolePermissions(any(), any());
+    }
+
+    @Test
+    void shouldRejectSystemAdminPermissionReadEvenWhenAuthorityWasAssigned() throws Exception {
+        mockMvc.perform(get("/roles/10/permissions")
+                        .with(user("system-admin").authorities(
+                                new SimpleGrantedAuthority("ROLE_SYSTEM_ADMIN"),
+                                new SimpleGrantedAuthority("role:assign_permission"))))
+                .andExpect(status().isForbidden());
+        verify(roleService, never()).getRolePermissionIds(10L);
+    }
+
+    @Test
+    void shouldReturnForbiddenWhenUpdatingSuperAdminPermissions() throws Exception {
+        org.mockito.Mockito.doThrow(new ForbiddenRolePermissionException())
+                .when(roleService).updateRolePermissions(1L, List.of(101L));
+
+        mockMvc.perform(put("/roles/1/permissions")
+                        .with(user("admin").authorities(
+                                new SimpleGrantedAuthority("ROLE_SUPER_ADMIN"),
+                                new SimpleGrantedAuthority("role:assign_permission")))
+                        .contentType("application/json")
+                        .content("{\"permissionIds\": [\"101\"]}"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.title").value("角色权限修改失败"))
+                .andExpect(jsonPath("$.code").value("ROLE_PERMISSION_UPDATE_FORBIDDEN"))
+                .andExpect(jsonPath("$.detail").value("不允许修改 SUPER_ADMIN 自身权限"));
+    }
+
+    @Test
     void shouldCreateRoleForAuthenticatedRequest() throws Exception {
         when(roleService.createRole(any())).thenReturn(100L);
 
         mockMvc.perform(post("/roles")
-                        .with(user("admin").authorities(new SimpleGrantedAuthority("role:create")))
+                        .with(user("admin").authorities(
+                                new SimpleGrantedAuthority("ROLE_SUPER_ADMIN"),
+                                new SimpleGrantedAuthority("role:create")
+                        ))
                         .contentType("application/json")
                         .content("""
                                 {
@@ -199,7 +254,10 @@ class RoleControllerTest {
     @Test
     void shouldRejectRoleWithoutRoleCode() throws Exception {
         mockMvc.perform(post("/roles")
-                        .with(user("admin").authorities(new SimpleGrantedAuthority("role:create")))
+                        .with(user("admin").authorities(
+                                new SimpleGrantedAuthority("ROLE_SUPER_ADMIN"),
+                                new SimpleGrantedAuthority("role:create")
+                        ))
                         .contentType("application/json")
                         .content("""
                                 {
@@ -216,7 +274,10 @@ class RoleControllerTest {
         when(roleService.createRole(any())).thenThrow(new DuplicateRoleCodeException("SYSTEM_ADMIN"));
 
         mockMvc.perform(post("/roles")
-                        .with(user("admin").authorities(new SimpleGrantedAuthority("role:create")))
+                        .with(user("admin").authorities(
+                                new SimpleGrantedAuthority("ROLE_SUPER_ADMIN"),
+                                new SimpleGrantedAuthority("role:create")
+                        ))
                         .contentType("application/json")
                         .content("""
                                 {
@@ -228,6 +289,51 @@ class RoleControllerTest {
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value("ROLE_CODE_ALREADY_EXISTS"))
                 .andExpect(jsonPath("$.detail").value("角色编码 SYSTEM_ADMIN 已存在"));
+    }
+
+    @Test
+    void shouldReturnForbiddenWhenRoleCreationIsOutsideOperatorScope() throws Exception {
+        when(roleService.createRole(any())).thenThrow(new ForbiddenRoleCreationException("SUPER_ADMIN"));
+
+        mockMvc.perform(post("/roles")
+                        .with(user("admin").authorities(
+                                new SimpleGrantedAuthority("ROLE_SUPER_ADMIN"),
+                                new SimpleGrantedAuthority("role:create")
+                        ))
+                        .contentType("application/json")
+                        .content("{\"roleName\":\"Super admin\",\"roleCode\":\"SUPER_ADMIN\",\"status\":1}"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.title").value("角色创建失败"))
+                .andExpect(jsonPath("$.code").value("ROLE_CREATION_FORBIDDEN"))
+                .andExpect(jsonPath("$.detail").value("当前用户无权创建角色 SUPER_ADMIN"));
+    }
+
+    @Test
+    void shouldRejectSystemAdminEvenWhenRoleCreateAuthorityWasAssigned() throws Exception {
+        mockMvc.perform(post("/roles")
+                        .with(user("system-admin").authorities(
+                                new SimpleGrantedAuthority("ROLE_SYSTEM_ADMIN"),
+                                new SimpleGrantedAuthority("role:create")
+                        ))
+                        .contentType("application/json")
+                        .content("{\"roleName\":\"Custom role\",\"roleCode\":\"CUSTOM_ROLE\",\"status\":1}"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("FORBIDDEN"));
+        verify(roleService, never()).createRole(any());
+    }
+
+    @Test
+    void shouldRejectSalesRoleEvenWhenRoleCreateAuthorityWasAssigned() throws Exception {
+        mockMvc.perform(post("/roles")
+                        .with(user("sales-manager").authorities(
+                                new SimpleGrantedAuthority("ROLE_SALES_MANAGER"),
+                                new SimpleGrantedAuthority("role:create")
+                        ))
+                        .contentType("application/json")
+                        .content("{\"roleName\":\"Custom role\",\"roleCode\":\"CUSTOM_ROLE\",\"status\":1}"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("FORBIDDEN"));
+        verify(roleService, never()).createRole(any());
     }
 
     @Test

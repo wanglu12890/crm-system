@@ -70,6 +70,7 @@ class PermissionControllerTest {
         when(permissionService.getPermissionTree()).thenReturn(List.of(root));
 
         mockMvc.perform(get("/permissions").with(user("admin").authorities(
+                        new SimpleGrantedAuthority("ROLE_SUPER_ADMIN"),
                         new SimpleGrantedAuthority("permission:list"))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].id").value("1"))
@@ -94,6 +95,24 @@ class PermissionControllerTest {
     @Test
     void shouldRejectPermissionTreeWithoutAuthority() throws Exception {
         mockMvc.perform(get("/permissions").with(user("admin")))
+                .andExpect(status().isForbidden());
+        verify(permissionService, never()).getPermissionTree();
+    }
+
+    @Test
+    void shouldRejectSystemAdminEvenWhenPermissionListAuthorityWasAssigned() throws Exception {
+        mockMvc.perform(get("/permissions").with(user("system-admin").authorities(
+                        new SimpleGrantedAuthority("ROLE_SYSTEM_ADMIN"),
+                        new SimpleGrantedAuthority("permission:list"))))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("FORBIDDEN"));
+        verify(permissionService, never()).getPermissionTree();
+    }
+
+    @Test
+    void shouldRejectSuperAdminWithoutPermissionListAuthority() throws Exception {
+        mockMvc.perform(get("/permissions").with(user("admin").authorities(
+                        new SimpleGrantedAuthority("ROLE_SUPER_ADMIN"))))
                 .andExpect(status().isForbidden());
         verify(permissionService, never()).getPermissionTree();
     }

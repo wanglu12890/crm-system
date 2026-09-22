@@ -21,7 +21,7 @@ public class PermissionController {
     private final PermissionService permissionService;
 
     @GetMapping
-    @PreAuthorize("hasAuthority('permission:list')")
+    @PreAuthorize("hasRole('SUPER_ADMIN') and hasAuthority('permission:list')")
     public ResponseEntity<List<PermissionTreeVO>> getPermissionTree(){
         return ResponseEntity.ok(permissionService.getPermissionTree());
     }

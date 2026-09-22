@@ -6,6 +6,8 @@ import com.company.crm.entity.SysRole;
 import com.company.crm.entity.SysPermission;
 import com.company.crm.entity.SysRolePermission;
 import com.company.crm.exception.DuplicateRoleCodeException;
+import com.company.crm.exception.ForbiddenRoleCreationException;
+import com.company.crm.exception.ForbiddenRolePermissionException;
 import com.company.crm.exception.InvalidRolePermissionException;
 import com.company.crm.exception.RoleNotFoundException;
 import com.company.crm.mapper.SysPermissionMapper;
@@ -86,6 +88,7 @@ class RoleServiceImplTest {
     void shouldReplaceRolePermissions() {
         authenticate(9L, "admin");
         when(sysRoleMapper.selectCount(any(Wrapper.class))).thenReturn(1L);
+        when(sysRoleMapper.selectRoleCodeById(10L)).thenReturn("SYSTEM_ADMIN");
         when(sysPermissionMapper.selectList(any(Wrapper.class))).thenReturn(List.of(
                 permission(101L, 1), permission(104L, 1)
         ));
@@ -110,6 +113,7 @@ class RoleServiceImplTest {
     void shouldClearAllRolePermissions() {
         authenticate(9L, "admin");
         when(sysRoleMapper.selectCount(any(Wrapper.class))).thenReturn(1L);
+        when(sysRoleMapper.selectRoleCodeById(10L)).thenReturn("SALES_MANAGER");
         when(sysRolePermissionMapper.selectEnabledPermissionIdsByRoleId(10L))
                 .thenReturn(List.of(101L, 102L));
 
@@ -165,6 +169,21 @@ class RoleServiceImplTest {
         assertThatThrownBy(() -> roleService.updateRolePermissions(99L, List.of(101L)))
                 .isInstanceOf(RoleNotFoundException.class);
         verify(sysPermissionMapper, never()).selectList(any());
+        verify(sysRolePermissionMapper, never()).delete(any(Wrapper.class));
+        verify(sysRolePermissionMapper, never()).insert(any(SysRolePermission.class));
+    }
+
+    @Test
+    void shouldRejectUpdatingSuperAdminPermissionsWithoutWritingRelations() {
+        authenticate(9L, "admin", List.of("SUPER_ADMIN"));
+        when(sysRoleMapper.selectCount(any(Wrapper.class))).thenReturn(1L);
+        when(sysRoleMapper.selectRoleCodeById(1L)).thenReturn("SUPER_ADMIN");
+
+        assertThatThrownBy(() -> roleService.updateRolePermissions(1L, List.of(101L)))
+                .isInstanceOf(ForbiddenRolePermissionException.class)
+                .hasMessage("不允许修改 SUPER_ADMIN 自身权限");
+        verify(sysPermissionMapper, never()).selectList(any());
+        verify(sysRolePermissionMapper, never()).selectEnabledPermissionIdsByRoleId(any());
         verify(sysRolePermissionMapper, never()).delete(any(Wrapper.class));
         verify(sysRolePermissionMapper, never()).insert(any(SysRolePermission.class));
     }
@@ -255,7 +274,7 @@ class RoleServiceImplTest {
 
     @Test
     void shouldCreateRoleWithNormalizedFieldsAndCurrentOperator() {
-        authenticate(9L, "admin");
+        authenticate(9L, "admin", List.of("SUPER_ADMIN"));
         CreateRoleDTO dto = createRoleDto(" 系统管理员 ", " system_admin ", 1, " 负责系统管理 ");
         when(sysRoleMapper.selectCount(any(Wrapper.class))).thenReturn(0L);
         when(sysRoleMapper.insert(any(SysRole.class))).thenAnswer(invocation -> {
@@ -284,7 +303,7 @@ class RoleServiceImplTest {
 
     @Test
     void shouldRejectDuplicateRoleCodeWithoutInsert() {
-        authenticate(9L, "admin");
+        authenticate(9L, "admin", List.of("SUPER_ADMIN"));
         CreateRoleDTO dto = createRoleDto("系统管理员", "SYSTEM_ADMIN", 1, null);
         when(sysRoleMapper.selectCount(any(Wrapper.class))).thenReturn(1L);
 
@@ -296,7 +315,7 @@ class RoleServiceImplTest {
 
     @Test
     void shouldTranslateDatabaseUniqueConstraintConflict() {
-        authenticate(9L, "admin");
+        authenticate(9L, "admin", List.of("SUPER_ADMIN"));
         CreateRoleDTO dto = createRoleDto("系统管理员", "SYSTEM_ADMIN", 1, null);
         when(sysRoleMapper.selectCount(any(Wrapper.class))).thenReturn(0L);
         when(sysRoleMapper.insert(any(SysRole.class))).thenThrow(new DuplicateKeyException("duplicate"));
@@ -306,14 +325,89 @@ class RoleServiceImplTest {
                 .hasMessage("角色编码 SYSTEM_ADMIN 已存在");
     }
 
+    @Test
+    void shouldAllowSuperAdminToCreateBusinessRole() {
+        authenticate(9L, "admin", List.of("SUPER_ADMIN"));
+        stubSuccessfulRoleInsert();
+
+        assertThat(roleService.createRole(createRoleDto("Sales manager", "SALES_MANAGER", 1, null)))
+                .isEqualTo(100L);
+        verify(sysRoleMapper).insert(any(SysRole.class));
+    }
+
+    @Test
+    void shouldRejectSuperAdminRoleCreationEvenForSuperAdmin() {
+        authenticate(9L, "admin", List.of("SUPER_ADMIN"));
+        assertForbiddenWithoutInsert("SUPER_ADMIN");
+    }
+
+    @Test
+    void shouldRejectSystemAdminCreatingSystemAdmin() {
+        authenticate(10L, "system-admin", List.of("SYSTEM_ADMIN"));
+        assertForbiddenWithoutInsert("SYSTEM_ADMIN");
+    }
+
+    @Test
+    void shouldRejectSystemAdminCreatingSuperAdmin() {
+        authenticate(10L, "system-admin", List.of("SYSTEM_ADMIN"));
+        assertForbiddenWithoutInsert("SUPER_ADMIN");
+    }
+
+    @Test
+    void shouldRejectSystemAdminCreatingCustomBusinessRole() {
+        authenticate(10L, "system-admin", List.of("SYSTEM_ADMIN"));
+        assertForbiddenWithoutInsert("REGIONAL_OWNER");
+    }
+
+    @Test
+    void shouldRejectSalesManagerCreatingArbitraryRole() {
+        authenticate(11L, "sales-manager", List.of("SALES_MANAGER"));
+        assertForbiddenWithoutInsert("CUSTOM_BUSINESS_ROLE");
+    }
+
+    @Test
+    void shouldRejectSalesStaffCreatingArbitraryRole() {
+        authenticate(12L, "sales-staff", List.of("SALES_STAFF"));
+        assertForbiddenWithoutInsert("ANOTHER_BUSINESS_ROLE");
+    }
+
+    @Test
+    void shouldUseSuperAdminScopeForMultiRoleOperator() {
+        authenticate(9L, "admin", List.of("SYSTEM_ADMIN", "SUPER_ADMIN"));
+        stubSuccessfulRoleInsert();
+
+        assertThat(roleService.createRole(createRoleDto("System admin", "SYSTEM_ADMIN", 1, null)))
+                .isEqualTo(100L);
+        verify(sysRoleMapper).insert(any(SysRole.class));
+    }
+
     private void authenticate(Long userId, String username) {
+        authenticate(userId, username, List.of());
+    }
+
+    private void authenticate(Long userId, String username, List<String> roles) {
         SecurityUser principal = new SecurityUser(
                 userId, username, "password", "系统管理员", 1, 0,
-                List.of(), List.of(), List.of()
+                roles, List.of(), List.of()
         );
         SecurityContextHolder.getContext().setAuthentication(
                 new UsernamePasswordAuthenticationToken(principal, null, principal.getAuthorities())
         );
+    }
+
+    private void stubSuccessfulRoleInsert() {
+        when(sysRoleMapper.selectCount(any(Wrapper.class))).thenReturn(0L);
+        when(sysRoleMapper.insert(any(SysRole.class))).thenAnswer(invocation -> {
+            ReflectionTestUtils.setField(invocation.<SysRole>getArgument(0), "id", 100L);
+            return 1;
+        });
+    }
+
+    private void assertForbiddenWithoutInsert(String roleCode) {
+        assertThatThrownBy(() -> roleService.createRole(createRoleDto("Protected role", roleCode, 1, null)))
+                .isInstanceOf(ForbiddenRoleCreationException.class)
+                .hasMessage("当前用户无权创建角色 " + roleCode);
+        verify(sysRoleMapper, never()).insert(any(SysRole.class));
     }
 
     private CreateRoleDTO createRoleDto(

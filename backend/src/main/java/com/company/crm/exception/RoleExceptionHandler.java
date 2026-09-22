@@ -9,6 +9,30 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 @RestControllerAdvice
 public class RoleExceptionHandler {
 
+    @ExceptionHandler(ForbiddenRolePermissionException.class)
+    public ResponseEntity<ProblemDetail> handleForbiddenRolePermission(
+            ForbiddenRolePermissionException exception
+    ) {
+        return problem(
+                HttpStatus.FORBIDDEN,
+                "角色权限修改失败",
+                exception.getMessage(),
+                "ROLE_PERMISSION_UPDATE_FORBIDDEN"
+        );
+    }
+
+    @ExceptionHandler(ForbiddenRoleCreationException.class)
+    public ResponseEntity<ProblemDetail> handleForbiddenRoleCreation(
+            ForbiddenRoleCreationException exception
+    ) {
+        return problem(
+                HttpStatus.FORBIDDEN,
+                "角色创建失败",
+                exception.getMessage(),
+                "ROLE_CREATION_FORBIDDEN"
+        );
+    }
+
     @ExceptionHandler(DuplicateRoleCodeException.class)
     public ResponseEntity<ProblemDetail> handleDuplicateRoleCode(DuplicateRoleCodeException exception) {
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, exception.getMessage());
