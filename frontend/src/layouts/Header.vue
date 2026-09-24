@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useRouter } from 'vue-router'
 import { ArrowDown, UserFilled } from '@element-plus/icons-vue'
@@ -12,26 +12,10 @@ type UserMenuCommand = 'profile' | 'password' | 'logout'
 const router = useRouter()
 const authStore = useAuthStore()
 const { currentUser } = storeToRefs(authStore)
-const loadingUser = ref(false)
 
 const displayName = computed(() =>
   currentUser.value?.realName?.trim() || currentUser.value?.username || '用户'
 )
-
-const loadCurrentUser = async () => {
-  loadingUser.value = true
-  try {
-    await authStore.loadCurrentUser()
-  } catch (error: unknown) {
-    // 401 已由 request.ts 全局处理并跳转登录页。
-    //这里只处理其他类型的加载失败。
-    if (router.currentRoute.value.path !== '/login') {
-      ElMessage.error('当前用户信息加载失败，请稍后重试')
-    }
-  } finally {
-    loadingUser.value = false
-  }
-}
 
 const handleUserCommand = async (command: UserMenuCommand) => {
   if (command === 'profile') {
@@ -49,7 +33,6 @@ const handleUserCommand = async (command: UserMenuCommand) => {
   await router.replace('/login')
 }
 
-onMounted(loadCurrentUser)
 </script>
 
 <template>
@@ -64,12 +47,11 @@ onMounted(loadCurrentUser)
     <el-dropdown
       trigger="click"
       placement="bottom-end"
-      :disabled="loadingUser"
       @command="handleUserCommand"
     >
       <button class="user-trigger" type="button" :aria-label="`${displayName}用户菜单`">
         <el-avatar :size="34" :icon="UserFilled" class="user-trigger__avatar" />
-        <span class="user-trigger__name">{{ loadingUser ? '加载中...' : displayName }}</span>
+        <span class="user-trigger__name">{{ displayName }}</span>
         <el-icon class="user-trigger__arrow"><ArrowDown /></el-icon>
       </button>
 
