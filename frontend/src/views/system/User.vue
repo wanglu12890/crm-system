@@ -15,6 +15,13 @@ import type {
   UserFormData,
   UserSearchCriteria
 } from '@/types/user'
+import { useAuthStore } from '@/stores/auth'
+
+const authStore = useAuthStore()
+const canCreateUser = computed(
+  () => authStore.hasPermission('user:create')
+    && authStore.hasPermission('user:assign_role')
+)
 
 const users = ref<User[]>([])
 const roles = ref<Role[]>([])
@@ -155,7 +162,7 @@ const handleSizeChange = (size: number) => {
     />
 
     <!-- 用户操作工具栏-新建用户 -->
-    <div class="user-page__toolbar">
+    <div v-if="canCreateUser" class="user-page__toolbar">
       <el-button type="primary" @click="handleCreate">新建用户</el-button>
     </div>
 

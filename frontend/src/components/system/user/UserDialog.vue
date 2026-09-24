@@ -7,6 +7,7 @@ import type { Role } from '@/types/role'
 import { createUser } from '@/api/user'
 import axios from 'axios'
 import type { ApiProblemDetail } from '@/utils/request'
+import { useAuthStore } from '@/stores/auth'
 
 const props = defineProps<{
   modelValue: boolean
@@ -20,6 +21,7 @@ const emit = defineEmits<{
   success: []
 }>()
 
+const authStore = useAuthStore()
 const formRef = ref<FormInstance>()
 const submitting = ref(false)
 
@@ -32,21 +34,32 @@ const createEmptyForm = (): UserFormData => ({
   status: '正常'
 })
 
-// 定义一个响应式对象 form，用于存储用户表单数据。
+
 const form = reactive<UserFormData>(createEmptyForm())
 
-// 定义一个计算属性 visible，用于获取和设置对话框的可见性。
-// 当 visible 被设置为 true 时，对话框会显示；当 visible 被设置为 false 时，对话框会隐藏。
 const visible = computed({
   get: () => props.modelValue,
   set: (value: boolean) => emit('update:modelValue', value)
 })
 
-// 定义一个计算属性 title，用于根据对话框的模式显示不同的标题。
-// 如果是新建用户模式，则显示“新增用户”；如果是编辑用户模式，则显示“编辑用户”。
 const title = computed(() => (props.mode === 'create' ? '新增用户' : '编辑用户'))
 
-const enableRoles = computed(() => props.roles.filter((role) => role.status === 1))
+const assignableRoles = computed(() => {
+  const enabledRoles = props.roles.filter((role) => role.status === 1)
+
+  // 编辑接口和对象范围授权尚未实现，保持现有编辑占位流程不变。
+  if (props.mode !== 'create') return enabledRoles
+
+  if (authStore.hasRole('SUPER_ADMIN')) return enabledRoles
+
+  if (authStore.hasRole('SYSTEM_ADMIN')) {
+    return enabledRoles.filter(
+      (role) => role.roleCode !== 'SUPER_ADMIN' && role.roleCode !== 'SYSTEM_ADMIN'
+    )
+  }
+
+  return []
+})
 
 // 定义一个函数 validatePassword，用于验证密码的合法性。
 // 如果是新建用户模式，则密码不能为空；如果密码不为空，则长度必须在 6 到 64 个字符之间。
@@ -189,7 +202,7 @@ const handleClosed = () => {
           collapse-tags-tooltip
         >
           <el-option
-            v-for="role in enableRoles"
+            v-for="role in assignableRoles"
             :key="role.id"
             :label="role.roleName"
             :value="role.id"
