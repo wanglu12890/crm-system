@@ -1,7 +1,30 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import type { Role } from '@/types/role'
+import { useAuthStore } from '@/stores/auth'
 
 defineProps<{ roles: Role[] }>()
+
+const authStore = useAuthStore()
+
+// 当前登录用户是否为超级管理员
+const isSuperAdmin = computed(() => authStore.hasRole('SUPER_ADMIN'))
+
+// 是否可编辑角色（仅超级管理员可编辑）
+const canEditRole = computed(() => isSuperAdmin.value)
+
+// 是否可分配权限（与行无关）
+const canAssignPermission = computed(() =>
+  isSuperAdmin.value && authStore.hasPermission('role:assign_permission')
+)
+
+// 行级：目标角色不是 SUPER_ADMIN，且当前用户有能力分配权限
+const canConfigurePermission = (role: Role): boolean =>
+  canAssignPermission.value && role.roleCode !== 'SUPER_ADMIN'
+
+// 当前行没有任何可执行操作时，显示只读状态
+const hasRoleOperationPermission = (role: Role): boolean =>
+  canEditRole.value || canConfigurePermission(role)
 
 const emit = defineEmits<{
   edit: [role: Role]
@@ -24,11 +47,29 @@ const emit = defineEmits<{
     <el-table-column prop="remark" label="备注" min-width="200" show-overflow-tooltip />
     <el-table-column label="操作" width="190" fixed="right" align="center">
       <template #default="{ row }: { row: Role }">
-        <el-button link type="primary" @click="emit('edit', row)">编辑</el-button>
-        <el-button link type="primary" @click="emit('configurePermission', row)">
-          配置权限
-        </el-button>
+        <template v-if="hasRoleOperationPermission(row)">
+          <el-button v-if="canEditRole" link type="primary" @click="emit('edit', row)">
+            编辑
+          </el-button>
+          <el-button
+            v-if="canConfigurePermission(row)"
+            link
+            type="primary"
+            @click="emit('configurePermission', row)"
+          >
+            配置权限
+          </el-button>
+        </template>
+        <span v-else class="role-table__read-only">仅查看</span>
       </template>
     </el-table-column>
   </el-table>
 </template>
+
+<style scoped>
+.role-table__read-only {
+  color: #98a2b3;
+  font-size: 14px;
+  letter-spacing: 0.5px;
+}
+</style>

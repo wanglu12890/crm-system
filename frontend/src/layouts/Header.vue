@@ -1,15 +1,17 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
+import { storeToRefs } from 'pinia'
 import { useRouter } from 'vue-router'
 import { ArrowDown, UserFilled } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
-import { getCurrentUser, type CurrentUser } from '@/api/auth'
+import { useAuthStore } from '@/stores/auth'
 import { removeAuthToken } from '@/utils/auth'
 
 type UserMenuCommand = 'profile' | 'password' | 'logout'
 
 const router = useRouter()
-const currentUser = ref<CurrentUser | null>(null)
+const authStore = useAuthStore()
+const { currentUser } = storeToRefs(authStore)
 const loadingUser = ref(false)
 
 const displayName = computed(() =>
@@ -19,10 +21,8 @@ const displayName = computed(() =>
 const loadCurrentUser = async () => {
   loadingUser.value = true
   try {
-    const response = await getCurrentUser()
-    currentUser.value = response.data
+    await authStore.loadCurrentUser()
   } catch (error: unknown) {
-    currentUser.value = null
     // 401 已由 request.ts 全局处理并跳转登录页。
     //这里只处理其他类型的加载失败。
     if (router.currentRoute.value.path !== '/login') {
@@ -45,7 +45,7 @@ const handleUserCommand = async (command: UserMenuCommand) => {
   }
 
   removeAuthToken()
-  currentUser.value = null
+  authStore.clearUser()
   await router.replace('/login')
 }
 

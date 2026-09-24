@@ -14,6 +14,12 @@ import type {
 } from '@/types/role'
 import axios from 'axios'
 import { ApiProblemDetail } from '@/utils/request'
+import { useAuthStore } from '@/stores/auth'
+
+const authStore = useAuthStore()
+const canCreateRole = computed(
+  () => authStore.hasRole('SUPER_ADMIN') && authStore.hasPermission('role:create')
+)
 
 const roles = ref<Role[]>([])
 const loading = ref(false)
@@ -123,7 +129,7 @@ const handleSizeChange = (size: number) => {
       @reset="handleReset"
     />
 
-    <div class="role-page__toolbar">
+    <div v-if="canCreateRole" class="role-page__toolbar">
       <el-button type="primary" @click="handleCreateRole">+ 新建角色</el-button>
     </div>
 

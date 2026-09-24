@@ -1,7 +1,29 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import { useRoute } from 'vue-router'
+import { useAuthStore } from '@/stores/auth'
+
+interface MenuItem {
+  title: string
+  path: string
+  permission?: string
+}
 
 const route = useRoute()
+const authStore = useAuthStore()
+
+const systemMenuItems: MenuItem[] = [
+  { title: '用户管理', path: '/admin/system/user', permission: 'user:list' },
+  { title: '角色管理', path: '/admin/system/role', permission: 'role:list' },
+  { title: '权限管理', path: '/admin/system/permission', permission: 'permission:list' }
+]
+
+// 过滤出当前用户有权限访问的系统管理菜单项
+const visibleSystemMenuItems = computed(() =>
+  systemMenuItems.filter(
+    (menuItem) => !menuItem.permission || authStore.hasPermission(menuItem.permission)
+  )
+)
 </script>
 
 <template>
@@ -39,11 +61,16 @@ const route = useRoute()
         <el-menu-item index="/admin/analytics/ai">AI智能分析</el-menu-item>
       </el-sub-menu>
 
-      <el-sub-menu index="system">
+      <!-- 动态渲染有权限的菜单项 -->
+      <el-sub-menu v-if="visibleSystemMenuItems.length > 0" index="system">
         <template #title>系统管理</template>
-        <el-menu-item index="/admin/system/user">用户管理</el-menu-item>
-        <el-menu-item index="/admin/system/role">角色管理</el-menu-item>
-        <el-menu-item index="/admin/system/permission">权限管理</el-menu-item>
+        <el-menu-item
+          v-for="menuItem in visibleSystemMenuItems"
+          :key="menuItem.path"
+          :index="menuItem.path"
+        >
+          {{ menuItem.title }}
+        </el-menu-item>
       </el-sub-menu>
     </el-menu>
   </aside>

@@ -18,6 +18,7 @@ export interface CurrentUser {
   username: string
   realName: string
   roles: string[]
+  permissions: string[]
 }
 
 // 定义登录函数，接受登录请求数据作为参数，并返回一个 Promise，表示异步的登录请求结果。该函数使用封装的 request 实例发送 POST 请求到 '/auth/login' 接口，并指定请求和响应的数据类型。
