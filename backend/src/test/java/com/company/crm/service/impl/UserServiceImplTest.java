@@ -2,12 +2,14 @@ package com.company.crm.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.Wrapper;
 import com.company.crm.dto.user.CreateUserDTO;
+import com.company.crm.dto.user.UpdateUserDTO;
 import com.company.crm.entity.SysRole;
 import com.company.crm.entity.SysUser;
 import com.company.crm.entity.SysUserRole;
 import com.company.crm.exception.DuplicateUsernameException;
 import com.company.crm.exception.InvalidUserRoleException;
 import com.company.crm.exception.ForbiddenRoleAssignmentException;
+import com.company.crm.exception.ForbiddenUserUpdateException;
 import com.company.crm.mapper.SysRoleMapper;
 import com.company.crm.mapper.SysUserMapper;
 import com.company.crm.mapper.SysUserRoleMapper;
@@ -30,6 +32,7 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -201,6 +204,136 @@ class UserServiceImplTest {
         verify(sysUserRoleMapper).insert(any(SysUserRole.class));
     }
 
+    @Test
+    void shouldAllowSuperAdminToEditSystemAdminAndAssignAnyValidRole() {
+        prepareUpdate(List.of("SUPER_ADMIN"), List.of("SYSTEM_ADMIN"), "system", 101L, "SUPER_ADMIN");
+
+        userService.updateUser(201L, updateDto(List.of(101L)));
+
+        verify(sysUserMapper).updateById(argThat((SysUser user) ->
+                user.getRealName().equals("新姓名") && user.getMobile().equals("13800000000")
+                        && user.getStatus() == 0));
+        verify(sysUserRoleMapper).delete(any(Wrapper.class));
+        verify(sysUserRoleMapper).insert(argThat((SysUserRole relation) -> relation.getRoleId().equals(101L)));
+    }
+
+    @Test
+    void shouldAllowSuperAdminToPromoteBusinessUserToSystemAdmin() {
+        prepareUpdate(List.of("SUPER_ADMIN"), List.of("SALES_STAFF"), "sales", 101L, "SYSTEM_ADMIN");
+        userService.updateUser(201L, updateDto(List.of(101L)));
+        verify(sysUserMapper).updateById(any(SysUser.class));
+    }
+
+    @Test
+    void shouldAllowSystemAdminToEditBusinessUserAndAssignBusinessRole() {
+        prepareUpdate(List.of("SYSTEM_ADMIN"), List.of("SALES_STAFF"), "sales", 101L, "SALES_MANAGER");
+        userService.updateUser(201L, updateDto(List.of(101L)));
+        verify(sysUserMapper).updateById(any(SysUser.class));
+        verify(sysUserRoleMapper).delete(any(Wrapper.class));
+    }
+
+    @Test
+    void shouldAllowSystemAdminToAssignFutureBusinessRole() {
+        prepareUpdate(List.of("SYSTEM_ADMIN"), List.of("SALES_MANAGER"), "sales", 101L, "CUSTOM_BUSINESS");
+        userService.updateUser(201L, updateDto(List.of(101L)));
+        verify(sysUserMapper).updateById(any(SysUser.class));
+    }
+
+    @Test
+    void shouldRejectSystemAdminEditingSuperAdmin() {
+        assertUpdateTargetForbidden(List.of("SUPER_ADMIN"));
+    }
+
+    @Test
+    void shouldRejectSystemAdminEditingSystemAdmin() {
+        assertUpdateTargetForbidden(List.of("SYSTEM_ADMIN"));
+    }
+
+    @Test
+    void shouldRejectSystemAdminWhenAnyTargetRoleIsSystemLevel() {
+        assertUpdateTargetForbidden(List.of("SALES_MANAGER", "SYSTEM_ADMIN"));
+    }
+
+    @Test
+    void shouldRejectBusinessOperatorEditingUser() {
+        authenticate(List.of("SALES_MANAGER"));
+        when(sysUserMapper.selectById(201L)).thenReturn(user(201L, "sales", 1));
+        when(sysUserMapper.selectAllRoleCodesByUserId(201L)).thenReturn(List.of("SALES_STAFF"));
+
+        assertThatThrownBy(() -> userService.updateUser(201L, updateDto(List.of(101L))))
+                .isInstanceOf(ForbiddenUserUpdateException.class);
+        verify(sysUserMapper, never()).updateById(any(SysUser.class));
+    }
+
+    @Test
+    void shouldRejectSystemAdminAssigningSystemLevelRoleWithoutAnyWrite() {
+        prepareUpdate(List.of("SYSTEM_ADMIN"), List.of("SALES_STAFF"), "sales", 101L, "SUPER_ADMIN");
+
+        assertThatThrownBy(() -> userService.updateUser(201L, updateDto(List.of(101L))))
+                .isInstanceOf(ForbiddenRoleAssignmentException.class);
+        verify(sysUserMapper, never()).updateById(any(SysUser.class));
+        verify(sysUserRoleMapper, never()).delete(any(Wrapper.class));
+        verify(sysUserRoleMapper, never()).insert(any(SysUserRole.class));
+    }
+
+    @Test
+    void shouldRejectInvalidUpdateRoleWithoutAnyWrite() {
+        authenticate(List.of("SUPER_ADMIN"));
+        when(sysUserMapper.selectById(201L)).thenReturn(user(201L, "sales", 1));
+        when(sysUserMapper.selectAllRoleCodesByUserId(201L)).thenReturn(List.of("SALES_STAFF"));
+        when(sysRoleMapper.selectList(any(Wrapper.class))).thenReturn(List.of());
+
+        assertThatThrownBy(() -> userService.updateUser(201L, updateDto(List.of(999L))))
+                .isInstanceOf(InvalidUserRoleException.class);
+        verify(sysUserMapper, never()).updateById(any(SysUser.class));
+        verify(sysUserRoleMapper, never()).delete(any(Wrapper.class));
+    }
+
+    @Test
+    void shouldAllowRootSuperAdminProfileUpdateWhenRolesAndStatusUnchanged() {
+        authenticate(List.of("SUPER_ADMIN"));
+        when(sysUserMapper.selectById(201L)).thenReturn(user(201L, "admin", 1));
+        when(sysUserMapper.selectAllRoleCodesByUserId(201L)).thenReturn(List.of("SUPER_ADMIN"));
+        when(sysRoleMapper.selectList(any(Wrapper.class))).thenReturn(List.of(role(101L, "SUPER_ADMIN")));
+        when(sysUserRoleMapper.selectRoleIdsByUserId(201L)).thenReturn(List.of(101L));
+        UpdateUserDTO dto = updateDto(List.of(101L));
+        dto.setStatus(1);
+
+        userService.updateUser(201L, dto);
+
+        verify(sysUserMapper).updateById(any(SysUser.class));
+        verify(sysUserRoleMapper, never()).delete(any(Wrapper.class));
+        verify(sysUserRoleMapper, never()).insert(any(SysUserRole.class));
+    }
+
+    @Test
+    void shouldRejectRootSuperAdminRoleChange() {
+        prepareRootUpdate();
+        when(sysUserRoleMapper.selectRoleIdsByUserId(201L)).thenReturn(List.of(101L));
+        UpdateUserDTO dto = updateDto(List.of(102L));
+        dto.setStatus(1);
+
+        assertThatThrownBy(() -> userService.updateUser(201L, dto))
+                .isInstanceOf(ForbiddenUserUpdateException.class);
+        verify(sysUserMapper, never()).updateById(any(SysUser.class));
+    }
+
+    @Test
+    void shouldRejectRootSuperAdminStatusChange() {
+        prepareRootUpdate();
+        when(sysUserRoleMapper.selectRoleIdsByUserId(201L)).thenReturn(List.of(102L));
+
+        assertThatThrownBy(() -> userService.updateUser(201L, updateDto(List.of(102L))))
+                .isInstanceOf(ForbiddenUserUpdateException.class);
+        verify(sysUserMapper, never()).updateById(any(SysUser.class));
+    }
+
+    @Test
+    void updateUserShouldBeTransactional() throws Exception {
+        assertThat(UserServiceImpl.class.getMethod("updateUser", Long.class, UpdateUserDTO.class)
+                .isAnnotationPresent(Transactional.class)).isTrue();
+    }
+
     private void assignUserIdOnInsert(Long id) {
         doAnswer(invocation -> {
             invocation.<SysUser>getArgument(0).setId(id);
@@ -241,6 +374,57 @@ class UserServiceImplTest {
         role.setStatus(1);
         role.setDeleted(0);
         return role;
+    }
+
+    private UpdateUserDTO updateDto(List<Long> roleIds) {
+        UpdateUserDTO dto = new UpdateUserDTO();
+        dto.setRealName(" 新姓名 ");
+        dto.setPhone("13800000000");
+        dto.setStatus(0);
+        dto.setRoleIds(roleIds);
+        return dto;
+    }
+
+    private SysUser user(Long id, String username, int status) {
+        SysUser user = new SysUser();
+        user.setId(id);
+        user.setUsername(username);
+        user.setRealName("原姓名");
+        user.setStatus(status);
+        user.setDeleted(0);
+        user.setVersion(0);
+        return user;
+    }
+
+    private void prepareUpdate(
+            List<String> operatorRoles,
+            List<String> targetRoles,
+            String targetUsername,
+            Long roleId,
+            String newRoleCode
+    ) {
+        authenticate(operatorRoles);
+        when(sysUserMapper.selectById(201L)).thenReturn(user(201L, targetUsername, 1));
+        when(sysUserMapper.selectAllRoleCodesByUserId(201L)).thenReturn(targetRoles);
+        when(sysRoleMapper.selectList(any(Wrapper.class))).thenReturn(List.of(role(roleId, newRoleCode)));
+    }
+
+    private void assertUpdateTargetForbidden(List<String> targetRoles) {
+        authenticate(List.of("SYSTEM_ADMIN"));
+        when(sysUserMapper.selectById(201L)).thenReturn(user(201L, "target", 1));
+        when(sysUserMapper.selectAllRoleCodesByUserId(201L)).thenReturn(targetRoles);
+
+        assertThatThrownBy(() -> userService.updateUser(201L, updateDto(List.of(101L))))
+                .isInstanceOf(ForbiddenUserUpdateException.class);
+        verify(sysRoleMapper, never()).selectList(any(Wrapper.class));
+        verify(sysUserMapper, never()).updateById(any(SysUser.class));
+    }
+
+    private void prepareRootUpdate() {
+        authenticate(List.of("SUPER_ADMIN"));
+        when(sysUserMapper.selectById(201L)).thenReturn(user(201L, "admin", 1));
+        when(sysUserMapper.selectAllRoleCodesByUserId(201L)).thenReturn(List.of("SUPER_ADMIN"));
+        when(sysRoleMapper.selectList(any(Wrapper.class))).thenReturn(List.of(role(102L, "SALES_STAFF")));
     }
 
     private void assertSystemAdminCanAssign(String roleCode) {

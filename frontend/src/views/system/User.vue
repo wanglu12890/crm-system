@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import axios from 'axios'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessage } from 'element-plus'
 import UserDialog from '@/components/system/user/UserDialog.vue'
 import UserSearch from '@/components/system/user/UserSearch.vue'
 import UserTable from '@/components/system/user/UserTable.vue'
@@ -12,7 +12,6 @@ import type { Role } from '@/types/role'
 import type {
   User,
   UserDialogMode,
-  UserFormData,
   UserSearchCriteria
 } from '@/types/user'
 import { useAuthStore } from '@/stores/auth'
@@ -22,6 +21,19 @@ const canCreateUser = computed(
   () => authStore.hasPermission('user:create')
     && authStore.hasPermission('user:assign_role')
 )
+const canUpdateUser = computed(
+  () => authStore.hasPermission('user:update')
+    && authStore.hasPermission('user:assign_role')
+)
+
+const canEditTargetUser = (user: User): boolean => {
+  if (!canUpdateUser.value) return false  // 没有权限
+  if (authStore.hasRole('SUPER_ADMIN')) return true  // 超级管理员可以编辑任何用户
+  if (!authStore.hasRole('SYSTEM_ADMIN')) return false  // 非系统管理员不能编辑其他用户
+  return !user.roleCodes.some( // 目标用户的角色中是否包含超级管理员或系统管理员
+    (roleCode) => roleCode === 'SUPER_ADMIN' || roleCode === 'SYSTEM_ADMIN'
+  )
+}
 
 const users = ref<User[]>([])
 const roles = ref<Role[]>([])
@@ -170,6 +182,8 @@ const handleSizeChange = (size: number) => {
     <UserTable
       :users="paginatedUsers"
       :roles="roles"
+      :show-edit="canUpdateUser"
+      :can-edit="canEditTargetUser"
       @edit="handleEdit"
       @delete="handleDelete"
     />

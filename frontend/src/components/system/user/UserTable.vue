@@ -8,6 +8,8 @@ import type { Role } from '@/types/role'
 const props = defineProps<{
   users: User[]
   roles: Role[]
+  showEdit: boolean
+  canEdit: (user: User) => boolean
 }>()
 
 const emit = defineEmits<{
@@ -42,7 +44,21 @@ const emit = defineEmits<{
     <el-table-column prop="createTime" label="创建时间" min-width="130" align="center" />
     <el-table-column label="操作" width="180" fixed="right" align="center">
       <template #default="{ row }: { row: User }">
-        <el-button link type="primary" @click="emit('edit', row)">编辑</el-button>
+        <el-tooltip
+          v-if="showEdit"
+          :content="props.canEdit(row) ? '' : '无权编辑系统级管理员'"
+          :disabled="props.canEdit(row)"
+          placement="top"
+        >
+          <span>
+            <el-button
+              link
+              type="primary"
+              :disabled="!props.canEdit(row)"
+              @click="emit('edit', row)"
+            >编辑</el-button>
+          </span>
+        </el-tooltip>
         <el-button link type="danger" @click="emit('delete', row)">删除</el-button>
       </template>
     </el-table-column>

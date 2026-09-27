@@ -26,9 +26,31 @@ public class UserExceptionHandler {
         return problem(HttpStatus.FORBIDDEN, exception.getMessage(), "ROLE_ASSIGNMENT_FORBIDDEN");
     }
 
+    @ExceptionHandler(ForbiddenUserUpdateException.class)
+    public ResponseEntity<ProblemDetail> handleForbiddenUserUpdate(ForbiddenUserUpdateException exception) {
+        return problem(HttpStatus.FORBIDDEN, exception.getMessage(), "USER_UPDATE_FORBIDDEN", "用户编辑失败");
+    }
+
+    @ExceptionHandler(UserNotFoundException.class)
+    public ResponseEntity<ProblemDetail> handleUserNotFound(UserNotFoundException exception) {
+        return problem(HttpStatus.NOT_FOUND, exception.getMessage(), "USER_NOT_FOUND", "用户编辑失败");
+    }
+
     private ResponseEntity<ProblemDetail> problem(HttpStatus status, String detail, String code) {
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(status, detail);
         problem.setTitle("用户创建失败");
+        problem.setProperty("code", code);
+        return ResponseEntity.status(status).body(problem);
+    }
+
+    private ResponseEntity<ProblemDetail> problem(
+            HttpStatus status,
+            String detail,
+            String code,
+            String title
+    ) {
+        ProblemDetail problem = ProblemDetail.forStatusAndDetail(status, detail);
+        problem.setTitle(title);
         problem.setProperty("code", code);
         return ResponseEntity.status(status).body(problem);
     }

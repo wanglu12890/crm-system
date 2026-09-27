@@ -9,6 +9,8 @@ export interface User {
   username: string
   name: string
   roleIds: string[]
+  roleCodes: string[]
+  rootUser: boolean
   phone: string
   status: UserStatus
   createTime: string
@@ -33,6 +35,13 @@ export interface CreateUserRequest {
   username: string
   realName: string
   password: string
+  phone?: string
+  status: 0 | 1
+  roleIds: string[]
+}
+
+export interface UpdateUserRequest {
+  realName: string
   phone?: string
   status: 0 | 1
   roleIds: string[]

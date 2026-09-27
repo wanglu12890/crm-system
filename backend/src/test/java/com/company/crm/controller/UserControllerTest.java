@@ -26,6 +26,7 @@ import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -159,6 +160,56 @@ class UserControllerTest {
                 .andExpect(jsonPath("$.title").value("用户创建失败"))
                 .andExpect(jsonPath("$.status").value(403))
                 .andExpect(jsonPath("$.code").value("ROLE_ASSIGNMENT_FORBIDDEN"));
+    }
+
+    @Test
+    void shouldUpdateUserWithBothRequiredAuthorities() throws Exception {
+        mockMvc.perform(put("/users/201").with(user("admin").authorities(
+                        authority("user:update"), authority("user:assign_role")))
+                        .contentType("application/json")
+                        .content("""
+                                {"realName":"新姓名","phone":"13800000000",
+                                 "status":1,"roleIds":["2098342914642452481"]}
+                                """))
+                .andExpect(status().isNoContent());
+
+        verify(userService).updateUser(org.mockito.ArgumentMatchers.eq(201L),
+                argThat(dto -> dto.getRoleIds().equals(java.util.List.of(2098342914642452481L))));
+    }
+
+    @Test
+    void shouldRejectUpdateWithoutUpdateAuthority() throws Exception {
+        mockMvc.perform(put("/users/201").with(user("admin").authorities(authority("user:assign_role")))
+                        .contentType("application/json")
+                        .content(validUpdateJson()))
+                .andExpect(status().isForbidden());
+        verify(userService, never()).updateUser(org.mockito.ArgumentMatchers.anyLong(),
+                org.mockito.ArgumentMatchers.any());
+    }
+
+    @Test
+    void shouldRejectUpdateWithoutAssignRoleAuthority() throws Exception {
+        mockMvc.perform(put("/users/201").with(user("admin").authorities(authority("user:update")))
+                        .contentType("application/json")
+                        .content(validUpdateJson()))
+                .andExpect(status().isForbidden());
+        verify(userService, never()).updateUser(org.mockito.ArgumentMatchers.anyLong(),
+                org.mockito.ArgumentMatchers.any());
+    }
+
+    @Test
+    void shouldRejectInvalidUpdatePayload() throws Exception {
+        mockMvc.perform(put("/users/201").with(user("admin").authorities(
+                        authority("user:update"), authority("user:assign_role")))
+                        .contentType("application/json")
+                        .content("{\"realName\":\"\",\"status\":2,\"roleIds\":[]}"))
+                .andExpect(status().isBadRequest());
+        verify(userService, never()).updateUser(org.mockito.ArgumentMatchers.anyLong(),
+                org.mockito.ArgumentMatchers.any());
+    }
+
+    private String validUpdateJson() {
+        return "{\"realName\":\"新姓名\",\"phone\":\"13800000000\",\"status\":1,\"roleIds\":[\"1\"]}";
     }
 
     private SimpleGrantedAuthority authority(String value) {

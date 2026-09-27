@@ -2,12 +2,15 @@ package com.company.crm.service.impl;
 
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.company.crm.dto.user.CreateUserDTO;
+import com.company.crm.dto.user.UpdateUserDTO;
 import com.company.crm.entity.SysRole;
 import com.company.crm.entity.SysUser;
 import com.company.crm.entity.SysUserRole;
 import com.company.crm.exception.DuplicateUsernameException;
 import com.company.crm.exception.InvalidUserRoleException;
 import com.company.crm.exception.ForbiddenRoleAssignmentException;
+import com.company.crm.exception.ForbiddenUserUpdateException;
+import com.company.crm.exception.UserNotFoundException;
 import com.company.crm.mapper.SysRoleMapper;
 import com.company.crm.mapper.SysUserRoleMapper;
 import com.company.crm.mapper.SysUserMapper;
@@ -21,6 +24,7 @@ import java.time.LocalDateTime;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.Objects;
 import java.util.stream.Collectors;
 
 import org.springframework.dao.DuplicateKeyException;
@@ -36,6 +40,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class UserServiceImpl implements UserService{
     private static final String SUPER_ADMIN = "SUPER_ADMIN";
     private static final String SYSTEM_ADMIN = "SYSTEM_ADMIN";
+    private static final String ROOT_ADMIN_USERNAME = "admin";
     private static final Set<String> SYSTEM_ROLE_CODES = Set.of(SUPER_ADMIN, SYSTEM_ADMIN);
 
     private final SysUserMapper sysUserMapper;
@@ -87,7 +92,7 @@ public class UserServiceImpl implements UserService{
             throw new InvalidUserRoleException(invalidRoleIds);
         }
 
-        validateAssignableRoles(operatorUser, validRoles, operator, username);
+        validateAssignableRoles(operatorUser, validRoles, operator, username, "Create user");
 
         LocalDateTime now = LocalDateTime.now();
         SysUser user = new SysUser();
@@ -123,11 +128,128 @@ public class UserServiceImpl implements UserService{
         return user.getId();
     }
 
+    @Override
+    @Transactional
+    public void updateUser(Long userId, UpdateUserDTO dto) {
+        SecurityUser operatorUser = currentSecurityUser();
+        Long operatorId = operatorUser == null ? null : operatorUser.getUserId();
+        List<String> operatorRoles = operatorUser == null ? List.of() : operatorUser.getRoles();
+
+        SysUser targetUser = sysUserMapper.selectById(userId);
+        if (targetUser == null) {
+            throw new UserNotFoundException(userId);
+        }
+
+        List<String> targetRoleCodes = sysUserMapper.selectAllRoleCodesByUserId(userId);
+        validateUpdateScope(operatorRoles, operatorId, targetUser, targetRoleCodes);
+
+        List<Long> roleIds = new LinkedHashSet<>(dto.getRoleIds()).stream().toList();
+        List<SysRole> validRoles = findValidRoles(roleIds);
+        validateAllRolesExist(roleIds, validRoles, operatorUser == null ? "unknown" : operatorUser.getUsername(),
+                targetUser.getUsername(), "Update user");
+
+        boolean rootSuperAdmin = isRootSuperAdmin(targetUser, targetRoleCodes);
+        if (rootSuperAdmin) {
+            List<Long> currentRoleIds = sysUserRoleMapper.selectRoleIdsByUserId(userId);
+            if (!new LinkedHashSet<>(currentRoleIds).equals(new LinkedHashSet<>(roleIds))) {
+                rejectUserUpdate(operatorId, userId, "根 SUPER_ADMIN 的角色不可修改");
+            }
+            if (!Objects.equals(targetUser.getStatus(), dto.getStatus())) {
+                rejectUserUpdate(operatorId, userId, "根 SUPER_ADMIN 的状态不可修改");
+            }
+        } else {
+            validateAssignableRoles(operatorUser, validRoles,
+                    operatorUser == null ? "unknown" : operatorUser.getUsername(), targetUser.getUsername(),
+                    "Update user");
+        }
+
+        // 所有授权与角色合法性检查完成后，才开始写入，避免越权请求产生部分更新。
+        targetUser.setRealName(dto.getRealName().trim());
+        targetUser.setMobile(dto.getPhone() == null || dto.getPhone().isBlank() ? null : dto.getPhone().trim());
+        targetUser.setStatus(dto.getStatus());
+        targetUser.setUpdatedBy(operatorId);
+        targetUser.setUpdatedAt(LocalDateTime.now());
+        sysUserMapper.updateById(targetUser);
+
+        if (!rootSuperAdmin) {
+            sysUserRoleMapper.delete(Wrappers.<SysUserRole>lambdaQuery()
+                    .eq(SysUserRole::getUserId, userId));
+            LocalDateTime now = LocalDateTime.now();
+            for (Long roleId : roleIds) {
+                SysUserRole relation = new SysUserRole();
+                relation.setUserId(userId);
+                relation.setRoleId(roleId);
+                relation.setCreatedAt(now);
+                sysUserRoleMapper.insert(relation);
+            }
+        }
+
+        log.info("Update user success, operatorUserId={}, targetUserId={}", operatorId, userId);
+    }
+
+    private SecurityUser currentSecurityUser() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        return authentication != null && authentication.getPrincipal() instanceof SecurityUser securityUser
+                ? securityUser
+                : null;
+    }
+
+    private void validateUpdateScope(
+            List<String> operatorRoles,
+            Long operatorId,
+            SysUser targetUser,
+            List<String> targetRoleCodes
+    ) {
+        if (operatorRoles.contains(SUPER_ADMIN)) {
+            return;
+        }
+        if (operatorRoles.contains(SYSTEM_ADMIN)
+                && targetRoleCodes.stream().noneMatch(SYSTEM_ROLE_CODES::contains)) {
+            return;
+        }
+        rejectUserUpdate(operatorId, targetUser.getId(), "当前用户无权编辑目标用户");
+    }
+
+    private boolean isRootSuperAdmin(SysUser targetUser, List<String> targetRoleCodes) {
+        // 当前表结构没有 root/system 标识，使用初始化账号名与 SUPER_ADMIN 角色联合识别，避免把所有超级管理员都视为根用户。
+        return ROOT_ADMIN_USERNAME.equals(targetUser.getUsername()) && targetRoleCodes.contains(SUPER_ADMIN);
+    }
+
+    private void rejectUserUpdate(Long operatorId, Long targetUserId, String reason) {
+        log.warn("Update user rejected, operatorUserId={}, targetUserId={}, reason={}",
+                operatorId, targetUserId, reason);
+        throw new ForbiddenUserUpdateException(reason);
+    }
+
+    private List<SysRole> findValidRoles(List<Long> roleIds) {
+        return sysRoleMapper.selectList(Wrappers.<SysRole>lambdaQuery()
+                .in(SysRole::getId, roleIds)
+                .eq(SysRole::getStatus, 1)
+                .eq(SysRole::getDeleted, 0));
+    }
+
+    private void validateAllRolesExist(
+            List<Long> roleIds,
+            List<SysRole> validRoles,
+            String operator,
+            String username,
+            String action
+    ) {
+        Set<Long> validRoleIds = validRoles.stream().map(SysRole::getId).collect(Collectors.toSet());
+        List<Long> invalidRoleIds = roleIds.stream().filter(id -> !validRoleIds.contains(id)).toList();
+        if (!invalidRoleIds.isEmpty()) {
+            log.warn("{} rejected: invalid roles, operator={}, username={}, invalidRoleIds={}",
+                    action, operator, username, invalidRoleIds);
+            throw new InvalidUserRoleException(invalidRoleIds);
+        }
+    }
+
     private void validateAssignableRoles(
             SecurityUser operatorUser,
             List<SysRole> targetRoles,
             String operator,
-            String username
+            String username,
+            String action
     ) {
         if (operatorUser == null || operatorUser.getRoles().contains(SUPER_ADMIN)) {
             return;
@@ -143,8 +265,8 @@ public class UserServiceImpl implements UserService{
                 .toList();
         if (!forbiddenRoleCodes.isEmpty()) {
             log.warn(
-                    "Create user rejected: role assignment out of scope, operator={}, username={}, forbiddenRoleCodes={}",
-                    operator, username, forbiddenRoleCodes
+                    "{} rejected: role assignment out of scope, operator={}, username={}, forbiddenRoleCodes={}",
+                    action, operator, username, forbiddenRoleCodes
             );
             throw new ForbiddenRoleAssignmentException(forbiddenRoleCodes);
         }

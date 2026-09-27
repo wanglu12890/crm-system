@@ -53,6 +53,15 @@ public interface SysUserMapper extends BaseMapper<SysUser> {
                         AND r.deleted = 0
                         """)
         List<String> selectRoleCodesByUserId(Long userId);
+
+        /** 查询目标用户的完整角色集合，对象级授权不能只检查第一个角色。 */
+        @Select("""
+                        SELECT DISTINCT r.role_code
+                          FROM sys_user_role ur
+                          JOIN sys_role r ON ur.role_id = r.id
+                         WHERE ur.user_id = #{userId}
+                        """)
+        List<String> selectAllRoleCodesByUserId(Long userId);
          
         // 根据userId查询查询权限编码
         @Select("""
@@ -75,6 +84,19 @@ public interface SysUserMapper extends BaseMapper<SysUser> {
                                u.username,
                                u.real_name AS name,
                                COALESCE(GROUP_CONCAT(DISTINCT CAST(r.id AS CHAR) ORDER BY r.id SEPARATOR ','), '') AS roleIds,
+                               COALESCE((
+                                   SELECT GROUP_CONCAT(DISTINCT all_roles.role_code ORDER BY all_roles.id SEPARATOR ',')
+                                     FROM sys_user_role all_ur
+                                     JOIN sys_role all_roles ON all_roles.id = all_ur.role_id
+                                    WHERE all_ur.user_id = u.id
+                               ), '') AS roleCodes,
+                               (u.username = 'admin' AND EXISTS (
+                                   SELECT 1
+                                     FROM sys_user_role root_ur
+                                     JOIN sys_role root_role ON root_role.id = root_ur.role_id
+                                    WHERE root_ur.user_id = u.id
+                                      AND root_role.role_code = 'SUPER_ADMIN'
+                               )) AS rootUser,
                                COALESCE(u.mobile, '') AS phone,
                                CASE u.status WHEN 1 THEN '正常' ELSE '停用' END AS status,
                                DATE_FORMAT(u.created_at, '%Y-%m-%d') AS createTime

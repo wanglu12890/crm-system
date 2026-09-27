@@ -4,7 +4,7 @@ import { computed, reactive, ref, watch } from 'vue'
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
 import type { User, UserDialogMode, UserFormData } from '@/types/user'
 import type { Role } from '@/types/role'
-import { createUser } from '@/api/user'
+import { createUser, updateUser } from '@/api/user'
 import axios from 'axios'
 import type { ApiProblemDetail } from '@/utils/request'
 import { useAuthStore } from '@/stores/auth'
@@ -46,9 +46,6 @@ const title = computed(() => (props.mode === 'create' ? '新增用户' : '编辑
 
 const assignableRoles = computed(() => {
   const enabledRoles = props.roles.filter((role) => role.status === 1)
-
-  // 编辑接口和对象范围授权尚未实现，保持现有编辑占位流程不变。
-  if (props.mode !== 'create') return enabledRoles
 
   if (authStore.hasRole('SUPER_ADMIN')) return enabledRoles
 
@@ -125,24 +122,28 @@ const handleSave = async () => {
   // 如果验证失败，则直接返回。
   if (!valid) return
 
-  if (props.mode === 'edit') {
-    ElMessage.warning('编辑用户接口尚未实现')
-    return
-  }
-
   submitting.value = true
 
   try {
-    
+    if (props.mode === 'edit' && form.id) {
+      await updateUser(form.id, {
+        realName: form.name,
+        roleIds: [...form.roleIds],
+        phone: form.phone || undefined,
+        status: form.status === '正常' ? 1 : 0
+      })
+      ElMessage.success('用户修改成功')
+    } else {
       await createUser({
-      username: form.username,
-      realName: form.name,
-      password: form.password,
-      roleIds: [...form.roleIds],
-      phone: form.phone || undefined,
-      status: form.status === '正常' ? 1 : 0
-    })
-    ElMessage.success('用户创建成功')
+        username: form.username,
+        realName: form.name,
+        password: form.password,
+        roleIds: [...form.roleIds],
+        phone: form.phone || undefined,
+        status: form.status === '正常' ? 1 : 0
+      })
+      ElMessage.success('用户创建成功')
+    }
        
     visible.value = false
     emit('success') // 触发 success 事件，通知父组件刷新用户列表
@@ -174,18 +175,23 @@ const handleClosed = () => {
   >
     <el-form ref="formRef" :model="form" :rules="rules" label-width="88px">
       <el-form-item label="用户名" prop="username">
-        <el-input v-model.trim="form.username" placeholder="请输入用户名" maxlength="64" />
+        <el-input
+          v-model.trim="form.username"
+          placeholder="请输入用户名"
+          maxlength="64"
+          :disabled="mode === 'edit'"
+        />
       </el-form-item>
 
       <el-form-item label="真实姓名" prop="name">
         <el-input v-model.trim="form.name" placeholder="请输入真实姓名" maxlength="64" />
       </el-form-item>
 
-      <el-form-item label="密码" prop="password">
+      <el-form-item v-if="mode === 'create'" label="密码" prop="password">
         <el-input
           v-model="form.password"
           type="password"
-          :placeholder="mode === 'create' ? '请输入密码' : '留空表示不修改密码'"
+          placeholder="请输入密码"
           show-password
           maxlength="64"
           autocomplete="new-password"
@@ -200,6 +206,7 @@ const handleClosed = () => {
           multiple
           collapse-tags
           collapse-tags-tooltip
+          :disabled="mode === 'edit' && Boolean(user?.rootUser)"
         >
           <el-option
             v-for="role in assignableRoles"
@@ -215,7 +222,11 @@ const handleClosed = () => {
       </el-form-item>
 
       <el-form-item label="状态" prop="status">
-        <el-select v-model="form.status" class="user-dialog__select">
+        <el-select
+          v-model="form.status"
+          class="user-dialog__select"
+          :disabled="mode === 'edit' && Boolean(user?.rootUser)"
+        >
           <el-option label="正常" value="正常" />
           <el-option label="停用" value="停用" />
         </el-select>
