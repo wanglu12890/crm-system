@@ -2,6 +2,7 @@ package com.company.crm.controller;
 
 import com.company.crm.dto.role.CreateRoleDTO;
 import com.company.crm.dto.role.UpdateRolePermissionsDTO;
+import com.company.crm.dto.role.UpdateRoleDTO;
 import com.company.crm.service.RoleService;
 import com.company.crm.vo.role.RoleListVO;
 import jakarta.validation.Valid;
@@ -58,5 +59,15 @@ public class RoleController {
     @PreAuthorize("hasRole('SUPER_ADMIN') and hasAuthority('role:create')")
     public ResponseEntity<Long> createRole(@Valid @RequestBody CreateRoleDTO dto) {
         return ResponseEntity.status(HttpStatus.CREATED).body(roleService.createRole(dto));
+    }
+
+    @PutMapping("/{roleId}")
+    @PreAuthorize("hasRole('SUPER_ADMIN') and hasAuthority('role:update')")
+    public ResponseEntity<Void> updateRole(
+            @PathVariable Long roleId,
+            @Valid @RequestBody UpdateRoleDTO dto
+    ) {
+        roleService.updateRole(roleId, dto);
+        return ResponseEntity.noContent().build();
     }
 }

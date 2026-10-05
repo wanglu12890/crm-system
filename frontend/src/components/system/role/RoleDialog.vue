@@ -2,7 +2,7 @@
 import { computed, reactive, ref, watch } from 'vue'
 import axios from 'axios'
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
-import { createRole } from '@/api/role'
+import { createRole, updateRole } from '@/api/role'
 import type { ApiProblemDetail } from '@/utils/request'
 import type { Role, RoleDialogMode, RoleFormData } from '@/types/role'
 
@@ -14,7 +14,6 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   'update:modelValue': [visible: boolean]
-  save: [data: RoleFormData]
   success: []
 }>()
 
@@ -33,6 +32,9 @@ const visible = computed({
   set: (value: boolean) => emit('update:modelValue', value)
 })
 const title = computed(() => (props.mode === 'create' ? '新建角色' : '编辑角色'))
+const isSuperAdminRole = computed(
+  () => props.mode === 'edit' && props.role?.roleCode === 'SUPER_ADMIN'
+)
 
 const rules: FormRules<RoleFormData> = {
   roleName: [
@@ -71,27 +73,33 @@ const handleSave = async () => {
   const valid = await formRef.value.validate().catch(() => false)
   if (!valid) return
 
-  if (props.mode === 'edit') {
-    emit('save', { ...form })
-    return
-  }
-
   submitting.value = true
   try {
-    await createRole({
-      roleName: form.roleName,
-      roleCode: form.roleCode,
-      status: form.status,
-      remark: form.remark
-    })
-    ElMessage.success('角色创建成功')
+    if (props.mode === 'edit' && form.id) {
+      await updateRole(form.id, {
+        roleName: form.roleName,
+        status: form.status,
+        remark: form.remark
+      })
+      ElMessage.success('角色修改成功')
+    } else {
+      await createRole({
+        roleName: form.roleName,
+        roleCode: form.roleCode,
+        status: form.status,
+        remark: form.remark
+      })
+      ElMessage.success('角色创建成功')
+    }
     visible.value = false
     emit('success')
   } catch (error: unknown) {
     const detail = axios.isAxiosError<ApiProblemDetail>(error)
       ? error.response?.data?.detail
       : undefined
-    ElMessage.error(detail || '角色创建失败，请稍后重试')
+    ElMessage.error(
+      detail || (props.mode === 'edit' ? '角色修改失败，请稍后重试' : '角色创建失败，请稍后重试')
+    )
   } finally {
     submitting.value = false
   }
@@ -113,8 +121,22 @@ const handleClosed = () => {
     @closed="handleClosed"
   >
     <el-form ref="formRef" :model="form" :rules="rules" label-width="88px">
+      <el-alert
+        v-if="isSuperAdminRole"
+        title="超级管理员角色仅允许修改备注"
+        type="warning"
+        :closable="false"
+        show-icon
+        class="role-dialog__alert"
+      />
+
       <el-form-item label="角色名称" prop="roleName">
-        <el-input v-model.trim="form.roleName" placeholder="例如：销售经理" maxlength="64" />
+        <el-input
+          v-model.trim="form.roleName"
+          placeholder="例如：销售经理"
+          maxlength="64"
+          :disabled="isSuperAdminRole"
+        />
       </el-form-item>
 
       <el-form-item label="角色编码" prop="roleCode">
@@ -122,11 +144,12 @@ const handleClosed = () => {
           v-model.trim="form.roleCode"
           placeholder="例如：SALES_MANAGER"
           maxlength="64"
+          :disabled="mode === 'edit'"
         />
       </el-form-item>
 
       <el-form-item label="状态" prop="status">
-        <el-radio-group v-model="form.status">
+        <el-radio-group v-model="form.status" :disabled="isSuperAdminRole">
           <el-radio :value="1">启用</el-radio>
           <el-radio :value="0">禁用</el-radio>
         </el-radio-group>
@@ -150,3 +173,9 @@ const handleClosed = () => {
     </template>
   </el-dialog>
 </template>
+
+<style scoped>
+.role-dialog__alert {
+  margin-bottom: 18px;
+}
+</style>

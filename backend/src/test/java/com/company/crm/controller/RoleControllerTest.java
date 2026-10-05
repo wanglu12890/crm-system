@@ -380,4 +380,80 @@ class RoleControllerTest {
                 .andExpect(status().isForbidden());
         verify(roleService, never()).updateRolePermissions(any(), any());
     }
+
+    @Test
+    void shouldUpdateRoleForSuperAdminWithAuthority() throws Exception {
+        mockMvc.perform(put("/roles/10")
+                        .with(user("admin").authorities(
+                                new SimpleGrantedAuthority("ROLE_SUPER_ADMIN"),
+                                new SimpleGrantedAuthority("role:update")))
+                        .contentType("application/json")
+                        .content(validUpdateJson()))
+                .andExpect(status().isNoContent());
+        verify(roleService).updateRole(org.mockito.ArgumentMatchers.eq(10L), any());
+    }
+
+    @Test
+    void shouldRejectSystemAdminRoleUpdateEvenWithAuthority() throws Exception {
+        mockMvc.perform(put("/roles/10")
+                        .with(user("system").authorities(
+                                new SimpleGrantedAuthority("ROLE_SYSTEM_ADMIN"),
+                                new SimpleGrantedAuthority("role:update")))
+                        .contentType("application/json")
+                        .content(validUpdateJson()))
+                .andExpect(status().isForbidden());
+        verify(roleService, never()).updateRole(any(), any());
+    }
+
+    @Test
+    void shouldRejectSalesManagerRoleUpdateEvenWithAuthority() throws Exception {
+        mockMvc.perform(put("/roles/10")
+                        .with(user("sales-manager").authorities(
+                                new SimpleGrantedAuthority("ROLE_SALES_MANAGER"),
+                                new SimpleGrantedAuthority("role:update")))
+                        .contentType("application/json")
+                        .content(validUpdateJson()))
+                .andExpect(status().isForbidden());
+        verify(roleService, never()).updateRole(any(), any());
+    }
+
+    @Test
+    void shouldRejectSuperAdminRoleUpdateWithoutAuthority() throws Exception {
+        mockMvc.perform(put("/roles/10")
+                        .with(user("admin").authorities(new SimpleGrantedAuthority("ROLE_SUPER_ADMIN")))
+                        .contentType("application/json")
+                        .content(validUpdateJson()))
+                .andExpect(status().isForbidden());
+        verify(roleService, never()).updateRole(any(), any());
+    }
+
+    @Test
+    void shouldRejectInvalidRoleUpdatePayload() throws Exception {
+        mockMvc.perform(put("/roles/10")
+                        .with(user("admin").authorities(
+                                new SimpleGrantedAuthority("ROLE_SUPER_ADMIN"),
+                                new SimpleGrantedAuthority("role:update")))
+                        .contentType("application/json")
+                        .content("{\"roleName\":\"\",\"status\":2,\"remark\":\"x\"}"))
+                .andExpect(status().isBadRequest());
+        verify(roleService, never()).updateRole(any(), any());
+    }
+
+    @Test
+    void shouldRejectRoleUpdateWithOversizedRemark() throws Exception {
+        String oversizedRemark = "x".repeat(501);
+        mockMvc.perform(put("/roles/10")
+                        .with(user("admin").authorities(
+                                new SimpleGrantedAuthority("ROLE_SUPER_ADMIN"),
+                                new SimpleGrantedAuthority("role:update")))
+                        .contentType("application/json")
+                        .content("{\"roleName\":\"销售经理\",\"status\":1,\"remark\":\""
+                                + oversizedRemark + "\"}"))
+                .andExpect(status().isBadRequest());
+        verify(roleService, never()).updateRole(any(), any());
+    }
+
+    private String validUpdateJson() {
+        return "{\"roleName\":\"销售经理\",\"status\":1,\"remark\":\"备注\"}";
+    }
 }

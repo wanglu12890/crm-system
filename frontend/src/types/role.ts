@@ -25,6 +25,8 @@ export interface RoleFormData {
 
 export type CreateRoleRequest = Omit<RoleFormData, 'id'>
 
+export type UpdateRoleRequest = Pick<RoleFormData, 'roleName' | 'status' | 'remark'>
+
 export interface UpdateRolePermissionsRequest {
   permissionIds: string[]
 }

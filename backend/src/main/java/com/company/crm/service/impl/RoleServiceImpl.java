@@ -2,12 +2,14 @@ package com.company.crm.service.impl;
 
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.company.crm.dto.role.CreateRoleDTO;
+import com.company.crm.dto.role.UpdateRoleDTO;
 import com.company.crm.entity.SysRole;
 import com.company.crm.entity.SysPermission;
 import com.company.crm.entity.SysRolePermission;
 import com.company.crm.exception.DuplicateRoleCodeException;
 import com.company.crm.exception.ForbiddenRoleCreationException;
 import com.company.crm.exception.ForbiddenRolePermissionException;
+import com.company.crm.exception.ForbiddenRoleUpdateException;
 import com.company.crm.exception.InvalidRolePermissionException;
 import com.company.crm.exception.RoleNotFoundException;
 import com.company.crm.mapper.SysPermissionMapper;
@@ -28,6 +30,7 @@ import java.time.LocalDateTime;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.Objects;
 
 @Service
 @RequiredArgsConstructor
@@ -184,6 +187,59 @@ public class RoleServiceImpl implements RoleService {
                 operator, role.getId(), role.getRoleCode(), role.getRoleName()
         );
         return role.getId();
+    }
+
+    @Override
+    @Transactional
+    public void updateRole(Long roleId, UpdateRoleDTO dto) {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        SecurityUser operator = authentication != null
+                && authentication.getPrincipal() instanceof SecurityUser securityUser
+                ? securityUser
+                : null;
+        Long operatorId = operator == null ? null : operator.getUserId();
+        if (operator == null || !operator.getRoles().contains(SUPER_ADMIN)) {
+            rejectRoleUpdate(operatorId, roleId, "仅 SUPER_ADMIN 可以编辑角色");
+        }
+
+        SysRole targetRole = sysRoleMapper.selectById(roleId);
+        if (targetRole == null || !Objects.equals(targetRole.getDeleted(), 0)) {
+            throw new RoleNotFoundException(roleId);
+        }
+
+        String requestedRoleName = dto.getRoleName().trim();
+        String requestedRemark = dto.getRemark() == null || dto.getRemark().isBlank()
+                ? null
+                : dto.getRemark().trim();
+        boolean statusChanged = !Objects.equals(targetRole.getStatus(), dto.getStatus());
+
+        if (SUPER_ADMIN.equals(targetRole.getRoleCode())) {
+            if (!Objects.equals(targetRole.getRoleName(), requestedRoleName)) {
+                rejectRoleUpdate(operatorId, roleId, "SUPER_ADMIN 角色名称不可修改");
+            }
+            if (statusChanged) {
+                rejectRoleUpdate(operatorId, roleId, "SUPER_ADMIN 角色状态不可修改");
+            }
+        } else {
+            targetRole.setRoleName(requestedRoleName);
+            targetRole.setStatus(dto.getStatus());
+        }
+
+        targetRole.setRemark(requestedRemark);
+        targetRole.setUpdatedBy(operatorId);
+        targetRole.setUpdatedAt(LocalDateTime.now());
+        sysRoleMapper.updateById(targetRole);
+
+        log.info(
+                "Update role success, operatorUserId={}, targetRoleId={}, targetRoleCode={}, statusChanged={}",
+                operatorId, roleId, targetRole.getRoleCode(), statusChanged
+        );
+    }
+
+    private void rejectRoleUpdate(Long operatorId, Long roleId, String reason) {
+        log.warn("Update role rejected, operatorUserId={}, targetRoleId={}, reason={}",
+                operatorId, roleId, reason);
+        throw new ForbiddenRoleUpdateException(reason);
     }
 
     /** 方法级权限是第一道防线；Service 再校验真实操作者角色，避免绕过 Controller。 */

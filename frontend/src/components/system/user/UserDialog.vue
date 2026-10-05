@@ -45,7 +45,12 @@ const visible = computed({
 const title = computed(() => (props.mode === 'create' ? '新增用户' : '编辑用户'))
 
 const assignableRoles = computed(() => {
-  const enabledRoles = props.roles.filter((role) => role.status === 1)
+  // 编辑时保留用户已绑定的停用角色，避免修改姓名等资料时静默解除原关联。
+  const enabledRoles = props.roles.filter(
+    (role) => role.status === 1 || (
+      props.mode === 'edit' && Boolean(props.user?.roleIds.includes(role.id))
+    )
+  )
 
   if (authStore.hasRole('SUPER_ADMIN')) return enabledRoles
 
@@ -213,6 +218,7 @@ const handleClosed = () => {
             :key="role.id"
             :label="role.roleName"
             :value="role.id"
+            :disabled="role.status !== 1"
           />
         </el-select>
       </el-form-item>

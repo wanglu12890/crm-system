@@ -2,12 +2,14 @@ package com.company.crm.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.Wrapper;
 import com.company.crm.dto.role.CreateRoleDTO;
+import com.company.crm.dto.role.UpdateRoleDTO;
 import com.company.crm.entity.SysRole;
 import com.company.crm.entity.SysPermission;
 import com.company.crm.entity.SysRolePermission;
 import com.company.crm.exception.DuplicateRoleCodeException;
 import com.company.crm.exception.ForbiddenRoleCreationException;
 import com.company.crm.exception.ForbiddenRolePermissionException;
+import com.company.crm.exception.ForbiddenRoleUpdateException;
 import com.company.crm.exception.InvalidRolePermissionException;
 import com.company.crm.exception.RoleNotFoundException;
 import com.company.crm.mapper.SysPermissionMapper;
@@ -381,6 +383,95 @@ class RoleServiceImplTest {
         verify(sysRoleMapper).insert(any(SysRole.class));
     }
 
+    @Test
+    void shouldUpdateSystemAdminNameWithoutChangingCodeOrPermissions() {
+        authenticate(9L, "admin", List.of("SUPER_ADMIN"));
+        when(sysRoleMapper.selectById(10L)).thenReturn(role(10L, "SYSTEM_ADMIN", "系统管理员", 1, "旧备注"));
+
+        roleService.updateRole(10L, updateRoleDto("系统运维管理员", 1, "新备注"));
+
+        var captor = org.mockito.ArgumentCaptor.forClass(SysRole.class);
+        verify(sysRoleMapper).updateById(captor.capture());
+        assertThat(captor.getValue().getRoleCode()).isEqualTo("SYSTEM_ADMIN");
+        assertThat(captor.getValue().getRoleName()).isEqualTo("系统运维管理员");
+        verify(sysRolePermissionMapper, never()).delete(any(Wrapper.class));
+        verify(sysRolePermissionMapper, never()).insert(any(SysRolePermission.class));
+    }
+
+    @Test
+    void shouldDisableBusinessRoleWithoutRemovingRelations() {
+        authenticate(9L, "admin", List.of("SUPER_ADMIN"));
+        when(sysRoleMapper.selectById(10L)).thenReturn(role(10L, "SALES_MANAGER", "销售经理", 1, null));
+
+        roleService.updateRole(10L, updateRoleDto("销售经理", 0, "暂时停用"));
+
+        verify(sysRoleMapper).updateById(org.mockito.ArgumentMatchers.argThat(
+                (SysRole role) -> role.getStatus() == 0));
+        verify(sysRolePermissionMapper, never()).delete(any(Wrapper.class));
+        verify(sysRolePermissionMapper, never()).insert(any(SysRolePermission.class));
+    }
+
+    @Test
+    void shouldUpdateBusinessRoleRemark() {
+        authenticate(9L, "admin", List.of("SUPER_ADMIN"));
+        when(sysRoleMapper.selectById(10L)).thenReturn(role(10L, "SALES_STAFF", "销售人员", 1, null));
+        roleService.updateRole(10L, updateRoleDto("销售人员", 1, "负责客户跟进"));
+        verify(sysRoleMapper).updateById(org.mockito.ArgumentMatchers.argThat(
+                (SysRole role) -> "负责客户跟进".equals(role.getRemark())));
+    }
+
+    @Test
+    void shouldAllowUpdatingOnlySuperAdminRemark() {
+        authenticate(9L, "admin", List.of("SUPER_ADMIN"));
+        when(sysRoleMapper.selectById(1L)).thenReturn(role(1L, "SUPER_ADMIN", "超级管理员", 1, "旧备注"));
+        roleService.updateRole(1L, updateRoleDto("超级管理员", 1, "系统保护角色"));
+        verify(sysRoleMapper).updateById(org.mockito.ArgumentMatchers.argThat(
+                (SysRole role) -> "系统保护角色".equals(role.getRemark())
+                        && "SUPER_ADMIN".equals(role.getRoleCode()) && role.getStatus() == 1));
+    }
+
+    @Test
+    void shouldRejectChangingSuperAdminNameWithoutWrite() {
+        authenticate(9L, "admin", List.of("SUPER_ADMIN"));
+        when(sysRoleMapper.selectById(1L)).thenReturn(role(1L, "SUPER_ADMIN", "超级管理员", 1, null));
+        assertThatThrownBy(() -> roleService.updateRole(1L, updateRoleDto("其他名称", 1, "备注")))
+                .isInstanceOf(ForbiddenRoleUpdateException.class);
+        verify(sysRoleMapper, never()).updateById(any(SysRole.class));
+    }
+
+    @Test
+    void shouldRejectChangingSuperAdminStatusWithoutWrite() {
+        authenticate(9L, "admin", List.of("SUPER_ADMIN"));
+        when(sysRoleMapper.selectById(1L)).thenReturn(role(1L, "SUPER_ADMIN", "超级管理员", 1, null));
+        assertThatThrownBy(() -> roleService.updateRole(1L, updateRoleDto("超级管理员", 0, "备注")))
+                .isInstanceOf(ForbiddenRoleUpdateException.class);
+        verify(sysRoleMapper, never()).updateById(any(SysRole.class));
+    }
+
+    @Test
+    void shouldRejectNonSuperAdminAtServiceBoundary() {
+        authenticate(10L, "system", List.of("SYSTEM_ADMIN"));
+        assertThatThrownBy(() -> roleService.updateRole(10L, updateRoleDto("角色", 1, null)))
+                .isInstanceOf(ForbiddenRoleUpdateException.class);
+        verify(sysRoleMapper, never()).selectById(any());
+        verify(sysRoleMapper, never()).updateById(any(SysRole.class));
+    }
+
+    @Test
+    void shouldRejectMissingRoleUpdate() {
+        authenticate(9L, "admin", List.of("SUPER_ADMIN"));
+        when(sysRoleMapper.selectById(99L)).thenReturn(null);
+        assertThatThrownBy(() -> roleService.updateRole(99L, updateRoleDto("角色", 1, null)))
+                .isInstanceOf(RoleNotFoundException.class);
+        verify(sysRoleMapper, never()).updateById(any(SysRole.class));
+    }
+
+    @Test
+    void shouldDeclareTransactionForRoleUpdate() throws Exception {
+        assertThat(RoleServiceImpl.class.getMethod("updateRole", Long.class, UpdateRoleDTO.class)
+                .isAnnotationPresent(Transactional.class)).isTrue();
+    }
+
     private void authenticate(Long userId, String username) {
         authenticate(userId, username, List.of());
     }
@@ -426,5 +517,25 @@ class RoleServiceImplTest {
         permission.setId(id);
         permission.setStatus(status);
         return permission;
+    }
+
+    private UpdateRoleDTO updateRoleDto(String roleName, Integer status, String remark) {
+        UpdateRoleDTO dto = new UpdateRoleDTO();
+        dto.setRoleName(roleName);
+        dto.setStatus(status);
+        dto.setRemark(remark);
+        return dto;
+    }
+
+    private SysRole role(Long id, String roleCode, String roleName, Integer status, String remark) {
+        SysRole role = new SysRole();
+        role.setId(id);
+        role.setRoleCode(roleCode);
+        role.setRoleName(roleName);
+        role.setStatus(status);
+        role.setRemark(remark);
+        role.setDeleted(0);
+        role.setVersion(0);
+        return role;
     }
 }

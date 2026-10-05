@@ -11,6 +11,8 @@ import org.springframework.security.authentication.DisabledException;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 
+import java.util.List;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.when;
@@ -63,6 +65,39 @@ class CustomUserDetailsServiceTest {
         assertThatThrownBy(() -> userDetailsService.loadUserByUsername("admin"))
                 .isInstanceOf(DisabledException.class)
                 .hasMessage("用户已删除，禁止登录");
+    }
+
+    @Test
+    void shouldKeepAuthoritiesFromOtherActiveRoleWhenOneRoleIsDisabled() {
+        SysUser user = createUser(1, 0);
+        when(sysUserMapper.selectByUsername("sales")).thenReturn(user);
+        // Mapper SQL 已过滤停用角色，这里模拟用户另一个启用角色仍可贡献身份和权限。
+        when(sysUserMapper.selectRoleCodesByUserId(1L)).thenReturn(List.of("SALES_STAFF"));
+        when(sysUserMapper.selectPermissionCodesByUserId(1L)).thenReturn(List.of("customer:list"));
+
+        SecurityUser result = (SecurityUser) userDetailsService.loadUserByUsername("sales");
+
+        assertThat(result.getRoles()).containsExactly("SALES_STAFF");
+        assertThat(result.getPermissions()).containsExactly("customer:list");
+        assertThat(result.getAuthorities()).extracting("authority")
+                .containsExactly("ROLE_SALES_STAFF", "customer:list");
+    }
+
+    @Test
+    void shouldRestoreRoleAuthoritiesAfterRoleIsReEnabled() {
+        SysUser user = createUser(1, 0);
+        when(sysUserMapper.selectByUsername("sales")).thenReturn(user);
+        when(sysUserMapper.selectRoleCodesByUserId(1L))
+                .thenReturn(List.of(), List.of("SALES_MANAGER"));
+        when(sysUserMapper.selectPermissionCodesByUserId(1L))
+                .thenReturn(List.of(), List.of("business:list"));
+
+        SecurityUser disabledResult = (SecurityUser) userDetailsService.loadUserByUsername("sales");
+        SecurityUser reEnabledResult = (SecurityUser) userDetailsService.loadUserByUsername("sales");
+
+        assertThat(disabledResult.getAuthorities()).isEmpty();
+        assertThat(reEnabledResult.getAuthorities()).extracting("authority")
+                .containsExactly("ROLE_SALES_MANAGER", "business:list");
     }
 
     private SysUser createUser(Integer status, Integer deleted) {

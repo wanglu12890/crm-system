@@ -9,7 +9,6 @@ import { getRoleList } from '@/api/role'
 import type {
   Role,
   RoleDialogMode,
-  RoleFormData,
   RoleSearchCriteria
 } from '@/types/role'
 import axios from 'axios'
@@ -93,16 +92,6 @@ const handleEditRole = (role: Role) => {
   roleDialogVisible.value = true
 }
 
-const handleSaveRole = (_data: RoleFormData) => {
-  // TODO: 后续分别接入角色新增和编辑接口。
-  ElMessage.info(
-    roleDialogMode.value === 'create'
-      ? '角色新增功能待后端接口完成后接入'
-      : '角色编辑功能待后端接口完成后接入'
-  )
-  roleDialogVisible.value = false
-}
-
 const handleConfigurePermission = (role: Role) => {
   permissionRole.value = role
   permissionDialogVisible.value = true
@@ -155,7 +144,6 @@ const handleSizeChange = (size: number) => {
       v-model="roleDialogVisible"
       :mode="roleDialogMode"
       :role="editingRole"
-      @save="handleSaveRole"
       @success="loadRoles"
     />
 

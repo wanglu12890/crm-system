@@ -144,13 +144,15 @@ public class UserServiceImpl implements UserService{
         validateUpdateScope(operatorRoles, operatorId, targetUser, targetRoleCodes);
 
         List<Long> roleIds = new LinkedHashSet<>(dto.getRoleIds()).stream().toList();
-        List<SysRole> validRoles = findValidRoles(roleIds);
-        validateAllRolesExist(roleIds, validRoles, operatorUser == null ? "unknown" : operatorUser.getUsername(),
+        List<Long> currentRoleIds = sysUserRoleMapper.selectRoleIdsByUserId(userId);
+        List<SysRole> requestedRoles = findExistingRoles(roleIds);
+        validateAllRolesExist(roleIds, requestedRoles, operatorUser == null ? "unknown" : operatorUser.getUsername(),
                 targetUser.getUsername(), "Update user");
+        validateDisabledRolesAreNotNewlyAssigned(roleIds, requestedRoles, currentRoleIds,
+                operatorUser == null ? "unknown" : operatorUser.getUsername(), targetUser.getUsername());
 
         boolean rootSuperAdmin = isRootSuperAdmin(targetUser, targetRoleCodes);
         if (rootSuperAdmin) {
-            List<Long> currentRoleIds = sysUserRoleMapper.selectRoleIdsByUserId(userId);
             if (!new LinkedHashSet<>(currentRoleIds).equals(new LinkedHashSet<>(roleIds))) {
                 rejectUserUpdate(operatorId, userId, "根 SUPER_ADMIN 的角色不可修改");
             }
@@ -158,7 +160,7 @@ public class UserServiceImpl implements UserService{
                 rejectUserUpdate(operatorId, userId, "根 SUPER_ADMIN 的状态不可修改");
             }
         } else {
-            validateAssignableRoles(operatorUser, validRoles,
+            validateAssignableRoles(operatorUser, requestedRoles,
                     operatorUser == null ? "unknown" : operatorUser.getUsername(), targetUser.getUsername(),
                     "Update user");
         }
@@ -226,6 +228,35 @@ public class UserServiceImpl implements UserService{
                 .in(SysRole::getId, roleIds)
                 .eq(SysRole::getStatus, 1)
                 .eq(SysRole::getDeleted, 0));
+    }
+
+    private List<SysRole> findExistingRoles(List<Long> roleIds) {
+        return sysRoleMapper.selectList(Wrappers.<SysRole>lambdaQuery()
+                .in(SysRole::getId, roleIds)
+                .eq(SysRole::getDeleted, 0));
+    }
+
+    private void validateDisabledRolesAreNotNewlyAssigned(
+            List<Long> roleIds,
+            List<SysRole> requestedRoles,
+            List<Long> currentRoleIds,
+            String operator,
+            String username
+    ) {
+        Set<Long> currentRoleIdSet = new LinkedHashSet<>(currentRoleIds);
+        Set<Long> disabledRoleIds = requestedRoles.stream()
+                .filter(role -> !Objects.equals(role.getStatus(), 1))
+                .map(SysRole::getId)
+                .collect(Collectors.toSet());
+        List<Long> newlyAssignedDisabledRoleIds = roleIds.stream()
+                .filter(disabledRoleIds::contains)
+                .filter(roleId -> !currentRoleIdSet.contains(roleId))
+                .toList();
+        if (!newlyAssignedDisabledRoleIds.isEmpty()) {
+            log.warn("Update user rejected: disabled roles cannot be newly assigned, operator={}, username={}, roleIds={}",
+                    operator, username, newlyAssignedDisabledRoleIds);
+            throw new InvalidUserRoleException(newlyAssignedDisabledRoleIds);
+        }
     }
 
     private void validateAllRolesExist(

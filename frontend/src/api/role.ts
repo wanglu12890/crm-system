@@ -1,4 +1,9 @@
-import type { CreateRoleRequest, Role, UpdateRolePermissionsRequest } from '@/types/role'
+import type {
+  CreateRoleRequest,
+  Role,
+  UpdateRolePermissionsRequest,
+  UpdateRoleRequest
+} from '@/types/role'
 import request from '@/utils/request'
 
 export function getRoleList() {
@@ -7,6 +12,10 @@ export function getRoleList() {
 
 export function createRole(data: CreateRoleRequest) {
   return request.post<number>('/roles', data)
+}
+
+export function updateRole(roleId: string, data: UpdateRoleRequest) {
+  return request.put<void>(`/roles/${roleId}`, data)
 }
 
 export function getRolePermissionIds(roleId: string) {

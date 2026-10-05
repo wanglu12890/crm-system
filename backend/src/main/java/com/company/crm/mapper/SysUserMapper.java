@@ -83,7 +83,13 @@ public interface SysUserMapper extends BaseMapper<SysUser> {
                         SELECT CAST(u.id AS CHAR) AS id,
                                u.username,
                                u.real_name AS name,
-                               COALESCE(GROUP_CONCAT(DISTINCT CAST(r.id AS CHAR) ORDER BY r.id SEPARATOR ','), '') AS roleIds,
+                               COALESCE((
+                                   SELECT GROUP_CONCAT(DISTINCT CAST(all_roles.id AS CHAR) ORDER BY all_roles.id SEPARATOR ',')
+                                     FROM sys_user_role all_ur
+                                     JOIN sys_role all_roles ON all_roles.id = all_ur.role_id
+                                    WHERE all_ur.user_id = u.id
+                                      AND all_roles.deleted = 0
+                               ), '') AS roleIds,
                                COALESCE((
                                    SELECT GROUP_CONCAT(DISTINCT all_roles.role_code ORDER BY all_roles.id SEPARATOR ',')
                                      FROM sys_user_role all_ur
@@ -101,8 +107,6 @@ public interface SysUserMapper extends BaseMapper<SysUser> {
                                CASE u.status WHEN 1 THEN '正常' ELSE '停用' END AS status,
                                DATE_FORMAT(u.created_at, '%Y-%m-%d') AS createTime
                           FROM sys_user u
-                          LEFT JOIN sys_user_role ur ON ur.user_id = u.id
-                          LEFT JOIN sys_role r ON r.id = ur.role_id AND r.status = 1 AND r.deleted = 0
                          WHERE u.deleted = 0
                          GROUP BY u.id, u.username, u.real_name, u.mobile, u.status, u.created_at
                          ORDER BY u.created_at DESC, u.id ASC

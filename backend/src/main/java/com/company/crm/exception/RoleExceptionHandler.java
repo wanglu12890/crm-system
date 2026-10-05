@@ -33,6 +33,16 @@ public class RoleExceptionHandler {
         );
     }
 
+    @ExceptionHandler(ForbiddenRoleUpdateException.class)
+    public ResponseEntity<ProblemDetail> handleForbiddenRoleUpdate(ForbiddenRoleUpdateException exception) {
+        return problem(
+                HttpStatus.FORBIDDEN,
+                "角色编辑失败",
+                exception.getMessage(),
+                "ROLE_UPDATE_FORBIDDEN"
+        );
+    }
+
     @ExceptionHandler(DuplicateRoleCodeException.class)
     public ResponseEntity<ProblemDetail> handleDuplicateRoleCode(DuplicateRoleCodeException exception) {
         ProblemDetail problem = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, exception.getMessage());

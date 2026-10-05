@@ -290,6 +290,40 @@ class UserServiceImplTest {
     }
 
     @Test
+    void shouldPreserveExistingDisabledRoleWhenUpdatingUserProfile() {
+        authenticate(List.of("SUPER_ADMIN"));
+        when(sysUserMapper.selectById(201L)).thenReturn(user(201L, "sales", 1));
+        when(sysUserMapper.selectAllRoleCodesByUserId(201L)).thenReturn(List.of("SALES_STAFF"));
+        when(sysUserRoleMapper.selectRoleIdsByUserId(201L)).thenReturn(List.of(101L));
+        SysRole disabledRole = role(101L, "SALES_STAFF");
+        disabledRole.setStatus(0);
+        when(sysRoleMapper.selectList(any(Wrapper.class))).thenReturn(List.of(disabledRole));
+
+        userService.updateUser(201L, updateDto(List.of(101L)));
+
+        verify(sysUserMapper).updateById(any(SysUser.class));
+        verify(sysUserRoleMapper).insert(argThat((SysUserRole relation) -> relation.getRoleId().equals(101L)));
+    }
+
+    @Test
+    void shouldRejectNewlyAssignedDisabledRoleWithoutAnyWrite() {
+        authenticate(List.of("SUPER_ADMIN"));
+        when(sysUserMapper.selectById(201L)).thenReturn(user(201L, "sales", 1));
+        when(sysUserMapper.selectAllRoleCodesByUserId(201L)).thenReturn(List.of("SALES_STAFF"));
+        when(sysUserRoleMapper.selectRoleIdsByUserId(201L)).thenReturn(List.of(102L));
+        SysRole disabledRole = role(101L, "SALES_MANAGER");
+        disabledRole.setStatus(0);
+        when(sysRoleMapper.selectList(any(Wrapper.class))).thenReturn(List.of(disabledRole));
+
+        assertThatThrownBy(() -> userService.updateUser(201L, updateDto(List.of(101L))))
+                .isInstanceOf(InvalidUserRoleException.class);
+
+        verify(sysUserMapper, never()).updateById(any(SysUser.class));
+        verify(sysUserRoleMapper, never()).delete(any(Wrapper.class));
+        verify(sysUserRoleMapper, never()).insert(any(SysUserRole.class));
+    }
+
+    @Test
     void shouldAllowRootSuperAdminProfileUpdateWhenRolesAndStatusUnchanged() {
         authenticate(List.of("SUPER_ADMIN"));
         when(sysUserMapper.selectById(201L)).thenReturn(user(201L, "admin", 1));

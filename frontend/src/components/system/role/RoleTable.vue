@@ -11,7 +11,9 @@ const authStore = useAuthStore()
 const isSuperAdmin = computed(() => authStore.hasRole('SUPER_ADMIN'))
 
 // 是否可编辑角色（仅超级管理员可编辑）
-const canEditRole = computed(() => isSuperAdmin.value)
+const canEditRole = computed(() =>
+  isSuperAdmin.value && authStore.hasPermission('role:update')
+)
 
 // 是否可分配权限（与行无关）
 const canAssignPermission = computed(() =>
