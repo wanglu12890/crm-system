@@ -31,3 +31,35 @@ export interface PermissionListQuery {
   moduleId?: string
   status?: PermissionStatus
 }
+
+export interface PermissionOverviewSummary {
+  permissionCount: number
+  roleCount: number
+  moduleCount: number
+}
+
+export interface PermissionOverviewRole {
+  id: string
+  roleName: string
+  roleCode: string
+  status: PermissionStatus
+}
+
+export interface PermissionOverviewPermission {
+  id: string
+  parentId: string
+  permissionName: string
+  permissionCode: string
+  moduleId: string | null
+  moduleName: string | null
+  permissionType: string
+  status: PermissionStatus
+  sortOrder: number
+}
+
+export interface PermissionOverviewResponse {
+  summary: PermissionOverviewSummary
+  roles: PermissionOverviewRole[]
+  permissions: PermissionOverviewPermission[]
+  rolePermissions: Record<string, string[]>
+}

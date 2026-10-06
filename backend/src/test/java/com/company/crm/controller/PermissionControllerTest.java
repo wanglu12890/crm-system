@@ -9,6 +9,7 @@ import com.company.crm.security.RestAccessDeniedHandler;
 import com.company.crm.service.PermissionService;
 import com.company.crm.vo.permission.PermissionTreeVO;
 import com.company.crm.vo.permission.PermissionListVO;
+import com.company.crm.vo.permission.PermissionOverviewVO;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
@@ -184,6 +185,57 @@ class PermissionControllerTest {
                                 new SimpleGrantedAuthority("permission:list"))))
                 .andExpect(status().isBadRequest());
         verify(permissionService, never()).getPermissionList(any(), any(), any());
+    }
+
+    @Test
+    void shouldReturnPermissionOverviewForSuperAdminWithAuthority() throws Exception {
+        PermissionOverviewVO overview = new PermissionOverviewVO(
+                new PermissionOverviewVO.Summary(1, 1, 1),
+                List.of(new PermissionOverviewVO.RoleItem(1L, "超级管理员", "SUPER_ADMIN", 1)),
+                List.of(new PermissionOverviewVO.PermissionItem(
+                        11L, 10L, "查看用户", "user:list", 10L, "用户管理", "BUTTON", 1, 1)),
+                java.util.Map.of("1", List.of("11"))
+        );
+        when(permissionService.getPermissionOverview()).thenReturn(overview);
+
+        mockMvc.perform(get("/permissions/overview").with(user("admin").authorities(
+                        new SimpleGrantedAuthority("ROLE_SUPER_ADMIN"),
+                        new SimpleGrantedAuthority("permission:list"))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.summary.permissionCount").value(1))
+                .andExpect(jsonPath("$.summary.roleCount").value(1))
+                .andExpect(jsonPath("$.summary.moduleCount").value(1))
+                .andExpect(jsonPath("$.roles[0].id").value("1"))
+                .andExpect(jsonPath("$.roles[0].roleCode").value("SUPER_ADMIN"))
+                .andExpect(jsonPath("$.permissions[0].id").value("11"))
+                .andExpect(jsonPath("$.permissions[0].moduleId").value("10"))
+                .andExpect(jsonPath("$.rolePermissions.1[0]").value("11"));
+    }
+
+    @Test
+    void shouldRejectAnonymousPermissionOverview() throws Exception {
+        mockMvc.perform(get("/permissions/overview"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("UNAUTHORIZED"));
+        verify(permissionService, never()).getPermissionOverview();
+    }
+
+    @Test
+    void shouldRejectSystemAdminPermissionOverviewEvenWithAuthority() throws Exception {
+        mockMvc.perform(get("/permissions/overview").with(user("system-admin").authorities(
+                        new SimpleGrantedAuthority("ROLE_SYSTEM_ADMIN"),
+                        new SimpleGrantedAuthority("permission:list"))))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("FORBIDDEN"));
+        verify(permissionService, never()).getPermissionOverview();
+    }
+
+    @Test
+    void shouldRejectSuperAdminPermissionOverviewWithoutAuthority() throws Exception {
+        mockMvc.perform(get("/permissions/overview").with(user("admin").authorities(
+                        new SimpleGrantedAuthority("ROLE_SUPER_ADMIN"))))
+                .andExpect(status().isForbidden());
+        verify(permissionService, never()).getPermissionOverview();
     }
 
     private PermissionTreeVO node(

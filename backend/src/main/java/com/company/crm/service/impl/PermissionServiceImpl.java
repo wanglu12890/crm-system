@@ -3,6 +3,8 @@ package com.company.crm.service.impl;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -16,18 +18,25 @@ import org.springframework.util.StringUtils;
 import com.company.crm.service.PermissionService;
 import com.company.crm.vo.permission.PermissionTreeVO;
 import com.company.crm.vo.permission.PermissionListVO;
+import com.company.crm.vo.permission.PermissionOverviewVO;
 
 import lombok.RequiredArgsConstructor;
 
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.company.crm.entity.SysPermission;
+import com.company.crm.entity.SysRole;
+import com.company.crm.entity.SysRolePermission;
 import com.company.crm.mapper.SysPermissionMapper;
+import com.company.crm.mapper.SysRoleMapper;
+import com.company.crm.mapper.SysRolePermissionMapper;
 
 @Service
 @RequiredArgsConstructor
 public class PermissionServiceImpl implements PermissionService{
 
     private final SysPermissionMapper sysPermissionMapper;
+    private final SysRoleMapper sysRoleMapper;
+    private final SysRolePermissionMapper sysRolePermissionMapper;
     
     @Override
     @Transactional(readOnly = true)
@@ -89,12 +98,7 @@ public class PermissionServiceImpl implements PermissionService{
     @Transactional(readOnly = true)
     public List<PermissionListVO> getPermissionList(String keyword, Long moduleId, Integer status) {
         // 权限数量较少，一次读取完整层级后再筛选，避免父节点被 keyword/status 提前过滤而导致模块归属错误。
-        List<SysPermission> permissions = sysPermissionMapper.selectList(
-                Wrappers.<SysPermission>lambdaQuery()
-                        .orderByAsc(SysPermission::getParentId)
-                        .orderByAsc(SysPermission::getSortOrder)
-                        .orderByAsc(SysPermission::getId)
-        );
+        List<SysPermission> permissions = loadAllPermissions();
         Map<Long, SysPermission> permissionMap = new HashMap<>();
         permissions.forEach(permission -> permissionMap.put(permission.getId(), permission));
 
@@ -113,6 +117,81 @@ public class PermissionServiceImpl implements PermissionService{
             result.add(toPermissionListVO(permission, module));
         }
         return result;
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public PermissionOverviewVO getPermissionOverview() {
+        List<SysRole> roles = sysRoleMapper.selectList(
+                Wrappers.<SysRole>lambdaQuery()
+                        .eq(SysRole::getDeleted, 0)
+                        .orderByAsc(SysRole::getId)
+        ).stream().filter(role -> Objects.equals(role.getDeleted(), 0)).toList();
+        List<SysPermission> permissions = loadAllPermissions();
+        List<SysRolePermission> relations = sysRolePermissionMapper.selectList(
+                Wrappers.<SysRolePermission>lambdaQuery()
+                        .orderByAsc(SysRolePermission::getRoleId)
+                        .orderByAsc(SysRolePermission::getPermissionId)
+        );
+
+        Map<Long, SysPermission> permissionMap = new HashMap<>();
+        permissions.forEach(permission -> permissionMap.put(permission.getId(), permission));
+
+        List<PermissionOverviewVO.RoleItem> roleItems = roles.stream()
+                .map(role -> new PermissionOverviewVO.RoleItem(
+                        role.getId(), role.getRoleName(), role.getRoleCode(), role.getStatus()))
+                .toList();
+        List<PermissionOverviewVO.PermissionItem> permissionItems = permissions.stream()
+                .map(permission -> {
+                    SysPermission module = resolveModule(permission, permissionMap);
+                    return new PermissionOverviewVO.PermissionItem(
+                            permission.getId(),
+                            permission.getParentId(),
+                            permission.getPermissionName(),
+                            permission.getPermissionCode(),
+                            module == null ? null : module.getId(),
+                            module == null ? null : module.getPermissionName(),
+                            permission.getPermissionType(),
+                            permission.getStatus(),
+                            permission.getSortOrder()
+                    );
+                })
+                .toList();
+
+        Set<Long> validRoleIds = roles.stream().map(SysRole::getId).collect(java.util.stream.Collectors.toSet());
+        Set<Long> validPermissionIds = permissions.stream()
+                .map(SysPermission::getId)
+                .collect(java.util.stream.Collectors.toSet());
+        Map<String, LinkedHashSet<String>> relationSets = new LinkedHashMap<>();
+        roles.forEach(role -> relationSets.put(String.valueOf(role.getId()), new LinkedHashSet<>()));
+        for (SysRolePermission relation : relations) {
+            if (validRoleIds.contains(relation.getRoleId())
+                    && validPermissionIds.contains(relation.getPermissionId())) {
+                relationSets.get(String.valueOf(relation.getRoleId()))
+                        .add(String.valueOf(relation.getPermissionId()));
+            }
+        }
+        Map<String, List<String>> rolePermissions = new LinkedHashMap<>();
+        relationSets.forEach((roleId, permissionIds) ->
+                rolePermissions.put(roleId, new ArrayList<>(permissionIds)));
+
+        int moduleCount = (int) permissionItems.stream()
+                .map(PermissionOverviewVO.PermissionItem::getModuleId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .count();
+        PermissionOverviewVO.Summary summary = new PermissionOverviewVO.Summary(
+                permissionItems.size(), roleItems.size(), moduleCount);
+        return new PermissionOverviewVO(summary, roleItems, permissionItems, rolePermissions);
+    }
+
+    private List<SysPermission> loadAllPermissions() {
+        return sysPermissionMapper.selectList(
+                Wrappers.<SysPermission>lambdaQuery()
+                        .orderByAsc(SysPermission::getParentId)
+                        .orderByAsc(SysPermission::getSortOrder)
+                        .orderByAsc(SysPermission::getId)
+        );
     }
 
     /**

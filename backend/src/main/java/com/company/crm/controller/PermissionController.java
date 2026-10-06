@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.RestController;
 import com.company.crm.service.PermissionService;
 import com.company.crm.vo.permission.PermissionTreeVO;
 import com.company.crm.vo.permission.PermissionListVO;
+import com.company.crm.vo.permission.PermissionOverviewVO;
 
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
@@ -38,5 +39,11 @@ public class PermissionController {
             @RequestParam(required = false) @Min(0) @Max(1) Integer status
     ) {
         return ResponseEntity.ok(permissionService.getPermissionList(keyword, moduleId, status));
+    }
+
+    @GetMapping("/overview")
+    @PreAuthorize("hasRole('SUPER_ADMIN') and hasAuthority('permission:list')")
+    public ResponseEntity<PermissionOverviewVO> getPermissionOverview() {
+        return ResponseEntity.ok(permissionService.getPermissionOverview());
     }
 }
