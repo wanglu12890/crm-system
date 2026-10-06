@@ -8,6 +8,7 @@ import com.company.crm.security.RestAuthenticationEntryPoint;
 import com.company.crm.security.RestAccessDeniedHandler;
 import com.company.crm.service.PermissionService;
 import com.company.crm.vo.permission.PermissionTreeVO;
+import com.company.crm.vo.permission.PermissionListVO;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
@@ -22,6 +23,7 @@ import java.util.List;
 import static org.mockito.Mockito.when;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.never;
+import static org.mockito.ArgumentMatchers.any;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -115,6 +117,73 @@ class PermissionControllerTest {
                         new SimpleGrantedAuthority("ROLE_SUPER_ADMIN"))))
                 .andExpect(status().isForbidden());
         verify(permissionService, never()).getPermissionTree();
+    }
+
+    @Test
+    void shouldReturnPermissionListForSuperAdminWithAuthority() throws Exception {
+        PermissionListVO item = new PermissionListVO();
+        item.setId(3L);
+        item.setParentId(2L);
+        item.setPermissionName("查看用户");
+        item.setPermissionCode("user:list");
+        item.setModuleId(2L);
+        item.setModuleName("用户管理");
+        item.setPermissionType("BUTTON");
+        item.setStatus(1);
+        item.setSortOrder(10);
+        when(permissionService.getPermissionList("user", 2L, 1)).thenReturn(List.of(item));
+
+        mockMvc.perform(get("/permissions/list")
+                        .param("keyword", "user")
+                        .param("moduleId", "2")
+                        .param("status", "1")
+                        .with(user("admin").authorities(
+                                new SimpleGrantedAuthority("ROLE_SUPER_ADMIN"),
+                                new SimpleGrantedAuthority("permission:list"))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].id").value("3"))
+                .andExpect(jsonPath("$[0].parentId").value("2"))
+                .andExpect(jsonPath("$[0].moduleId").value("2"))
+                .andExpect(jsonPath("$[0].moduleName").value("用户管理"))
+                .andExpect(jsonPath("$[0].permissionCode").value("user:list"))
+                .andExpect(jsonPath("$[0].status").value(1));
+    }
+
+    @Test
+    void shouldRejectAnonymousPermissionList() throws Exception {
+        mockMvc.perform(get("/permissions/list"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("UNAUTHORIZED"));
+        verify(permissionService, never()).getPermissionList(any(), any(), any());
+    }
+
+    @Test
+    void shouldRejectSystemAdminPermissionListEvenWithAuthority() throws Exception {
+        mockMvc.perform(get("/permissions/list").with(user("system-admin").authorities(
+                        new SimpleGrantedAuthority("ROLE_SYSTEM_ADMIN"),
+                        new SimpleGrantedAuthority("permission:list"))))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("FORBIDDEN"));
+        verify(permissionService, never()).getPermissionList(any(), any(), any());
+    }
+
+    @Test
+    void shouldRejectSuperAdminPermissionListWithoutAuthority() throws Exception {
+        mockMvc.perform(get("/permissions/list").with(user("admin").authorities(
+                        new SimpleGrantedAuthority("ROLE_SUPER_ADMIN"))))
+                .andExpect(status().isForbidden());
+        verify(permissionService, never()).getPermissionList(any(), any(), any());
+    }
+
+    @Test
+    void shouldRejectUnsupportedPermissionStatus() throws Exception {
+        mockMvc.perform(get("/permissions/list")
+                        .param("status", "2")
+                        .with(user("admin").authorities(
+                                new SimpleGrantedAuthority("ROLE_SUPER_ADMIN"),
+                                new SimpleGrantedAuthority("permission:list"))))
+                .andExpect(status().isBadRequest());
+        verify(permissionService, never()).getPermissionList(any(), any(), any());
     }
 
     private PermissionTreeVO node(

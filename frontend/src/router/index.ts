@@ -59,8 +59,7 @@ const routes: RouteRecordRaw[] = [
       {
         path: 'system/permission',
         name: 'SystemPermission',
-        component: () => import('@/views/Placeholder.vue'),
-        props: { title: '权限管理' },
+        component: () => import('@/views/system/Permission.vue'),
         meta: {
           title: '权限管理',
           role: 'SUPER_ADMIN',

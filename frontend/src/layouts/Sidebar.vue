@@ -7,6 +7,7 @@ interface MenuItem {
   title: string
   path: string
   permission?: string
+  role?: string
 }
 
 const route = useRoute()
@@ -15,13 +16,20 @@ const authStore = useAuthStore()
 const systemMenuItems: MenuItem[] = [
   { title: '用户管理', path: '/admin/system/user', permission: 'user:list' },
   { title: '角色管理', path: '/admin/system/role', permission: 'role:list' },
-  { title: '权限管理', path: '/admin/system/permission', permission: 'permission:list' }
+  {
+    title: '权限管理',
+    path: '/admin/system/permission',
+    role: 'SUPER_ADMIN',
+    permission: 'permission:list'
+  }
 ]
 
 // 过滤出当前用户有权限访问的系统管理菜单项
 const visibleSystemMenuItems = computed(() =>
   systemMenuItems.filter(
-    (menuItem) => !menuItem.permission || authStore.hasPermission(menuItem.permission)
+    (menuItem) =>
+      (!menuItem.role || authStore.hasRole(menuItem.role))
+      && (!menuItem.permission || authStore.hasPermission(menuItem.permission))
   )
 )
 </script>
