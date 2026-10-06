@@ -47,5 +47,9 @@ export interface UpdateUserRequest {
   roleIds: string[]
 }
 
+export interface ResetUserPasswordRequest {
+  newPassword: string
+}
+
 // 定义 UserDialogMode 的类型，它可以是字符串 'create' 或 'edit'，用于表示用户对话框的模式。
 export type UserDialogMode = 'create' | 'edit'

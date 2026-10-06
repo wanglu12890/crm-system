@@ -125,4 +125,21 @@ public interface SysUserMapper extends BaseMapper<SysUser> {
                         @Param("userId") Long userId,
                         @Param("lastLoginAt") LocalDateTime lastLoginAt);
 
+        /**
+         * 密码重置只更新安全凭证和审计字段，避免使用不完整实体覆盖其他用户数据。
+         */
+        @Update("""
+                        UPDATE sys_user
+                           SET password_hash = #{passwordHash},
+                               updated_by = #{updatedBy},
+                               updated_at = #{updatedAt}
+                         WHERE id = #{userId}
+                           AND deleted = 0
+                        """)
+        int updatePasswordHash(
+                        @Param("userId") Long userId,
+                        @Param("passwordHash") String passwordHash,
+                        @Param("updatedBy") Long updatedBy,
+                        @Param("updatedAt") LocalDateTime updatedAt);
+
 }

@@ -1,5 +1,10 @@
 import request from '@/utils/request'
-import type { CreateUserRequest, UpdateUserRequest, User } from '@/types/user'
+import type {
+  CreateUserRequest,
+  ResetUserPasswordRequest,
+  UpdateUserRequest,
+  User
+} from '@/types/user'
 
 export const getUserList = () => {
   return request.get<Array<Omit<User, 'roleIds' | 'roleCodes'> & {
@@ -32,4 +37,8 @@ export const createUser = (data: CreateUserRequest) => {
 
 export const updateUser = (userId: string, data: UpdateUserRequest) => {
   return request.put<void>(`/users/${userId}`, data)
+}
+
+export const resetUserPassword = (userId: string, data: ResetUserPasswordRequest) => {
+  return request.post<void>(`/users/${userId}/reset-password`, data)
 }

@@ -4,6 +4,7 @@ import com.company.crm.config.SecurityConfig;
 import com.company.crm.exception.DuplicateUsernameException;
 import com.company.crm.exception.UserExceptionHandler;
 import com.company.crm.exception.ForbiddenRoleAssignmentException;
+import com.company.crm.exception.ForbiddenPasswordResetException;
 import com.company.crm.security.CustomUserDetailsService;
 import com.company.crm.security.JwtAuthenticationFilter;
 import com.company.crm.security.JwtService;
@@ -206,6 +207,76 @@ class UserControllerTest {
                 .andExpect(status().isBadRequest());
         verify(userService, never()).updateUser(org.mockito.ArgumentMatchers.anyLong(),
                 org.mockito.ArgumentMatchers.any());
+    }
+
+    @Test
+    void shouldResetPasswordWithRequiredAuthority() throws Exception {
+        mockMvc.perform(post("/users/201/reset-password")
+                        .with(user("admin").authorities(authority("user:reset_password")))
+                        .contentType("application/json")
+                        .content("{\"newPassword\":\"NewPassword123\"}"))
+                .andExpect(status().isOk());
+
+        verify(userService).resetPassword(org.mockito.ArgumentMatchers.eq(201L),
+                argThat(dto -> dto.getNewPassword().equals("NewPassword123")));
+    }
+
+    @Test
+    void shouldRejectAnonymousPasswordReset() throws Exception {
+        mockMvc.perform(post("/users/201/reset-password")
+                        .contentType("application/json")
+                        .content("{\"newPassword\":\"NewPassword123\"}"))
+                .andExpect(status().isUnauthorized());
+        verify(userService, never()).resetPassword(org.mockito.ArgumentMatchers.anyLong(),
+                org.mockito.ArgumentMatchers.any());
+    }
+
+    @Test
+    void shouldRejectPasswordResetWithoutAuthority() throws Exception {
+        mockMvc.perform(post("/users/201/reset-password").with(user("admin"))
+                        .contentType("application/json")
+                        .content("{\"newPassword\":\"NewPassword123\"}"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("FORBIDDEN"));
+        verify(userService, never()).resetPassword(org.mockito.ArgumentMatchers.anyLong(),
+                org.mockito.ArgumentMatchers.any());
+    }
+
+    @Test
+    void shouldRejectMissingPassword() throws Exception {
+        mockMvc.perform(post("/users/201/reset-password")
+                        .with(user("admin").authorities(authority("user:reset_password")))
+                        .contentType("application/json")
+                        .content("{}"))
+                .andExpect(status().isBadRequest());
+        verify(userService, never()).resetPassword(org.mockito.ArgumentMatchers.anyLong(),
+                org.mockito.ArgumentMatchers.any());
+    }
+
+    @Test
+    void shouldRejectTooShortPassword() throws Exception {
+        mockMvc.perform(post("/users/201/reset-password")
+                        .with(user("admin").authorities(authority("user:reset_password")))
+                        .contentType("application/json")
+                        .content("{\"newPassword\":\"12345\"}"))
+                .andExpect(status().isBadRequest());
+        verify(userService, never()).resetPassword(org.mockito.ArgumentMatchers.anyLong(),
+                org.mockito.ArgumentMatchers.any());
+    }
+
+    @Test
+    void shouldMapObjectScopeRejectionToForbiddenProblemDetail() throws Exception {
+        org.mockito.Mockito.doThrow(new ForbiddenPasswordResetException("当前用户无权重置目标用户密码"))
+                .when(userService).resetPassword(org.mockito.ArgumentMatchers.eq(201L),
+                        org.mockito.ArgumentMatchers.any());
+
+        mockMvc.perform(post("/users/201/reset-password")
+                        .with(user("admin").authorities(authority("user:reset_password")))
+                        .contentType("application/json")
+                        .content("{\"newPassword\":\"NewPassword123\"}"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.title").value("密码重置失败"))
+                .andExpect(jsonPath("$.code").value("PASSWORD_RESET_FORBIDDEN"));
     }
 
     private String validUpdateJson() {

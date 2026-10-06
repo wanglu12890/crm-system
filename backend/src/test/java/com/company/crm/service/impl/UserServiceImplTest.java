@@ -2,6 +2,7 @@ package com.company.crm.service.impl;
 
 import com.baomidou.mybatisplus.core.conditions.Wrapper;
 import com.company.crm.dto.user.CreateUserDTO;
+import com.company.crm.dto.user.ResetUserPasswordDTO;
 import com.company.crm.dto.user.UpdateUserDTO;
 import com.company.crm.entity.SysRole;
 import com.company.crm.entity.SysUser;
@@ -10,6 +11,8 @@ import com.company.crm.exception.DuplicateUsernameException;
 import com.company.crm.exception.InvalidUserRoleException;
 import com.company.crm.exception.ForbiddenRoleAssignmentException;
 import com.company.crm.exception.ForbiddenUserUpdateException;
+import com.company.crm.exception.ForbiddenPasswordResetException;
+import com.company.crm.exception.UserNotFoundException;
 import com.company.crm.mapper.SysRoleMapper;
 import com.company.crm.mapper.SysUserMapper;
 import com.company.crm.mapper.SysUserRoleMapper;
@@ -368,6 +371,83 @@ class UserServiceImplTest {
                 .isAnnotationPresent(Transactional.class)).isTrue();
     }
 
+    @Test
+    void shouldAllowSuperAdminToResetSystemAdminPassword() {
+        assertPasswordResetAllowed(List.of("SUPER_ADMIN"), List.of("SYSTEM_ADMIN"), 1);
+    }
+
+    @Test
+    void shouldAllowSuperAdminToResetSalesManagerPassword() {
+        assertPasswordResetAllowed(List.of("SUPER_ADMIN"), List.of("SALES_MANAGER"), 1);
+    }
+
+    @Test
+    void shouldAllowSuperAdminToResetSalesStaffPassword() {
+        assertPasswordResetAllowed(List.of("SUPER_ADMIN"), List.of("SALES_STAFF"), 1);
+    }
+
+    @Test
+    void shouldAllowSystemAdminToResetSalesManagerPassword() {
+        assertPasswordResetAllowed(List.of("SYSTEM_ADMIN"), List.of("SALES_MANAGER"), 1);
+    }
+
+    @Test
+    void shouldAllowSystemAdminToResetDisabledBusinessUserPassword() {
+        assertPasswordResetAllowed(List.of("SYSTEM_ADMIN"), List.of("SALES_STAFF"), 0);
+    }
+
+    @Test
+    void shouldRejectResetWhenTargetHasSuperAdminRole() {
+        assertPasswordResetForbidden(List.of("SUPER_ADMIN"), List.of("SALES_STAFF", "SUPER_ADMIN"));
+    }
+
+    @Test
+    void shouldRejectSystemAdminResettingSystemAdmin() {
+        assertPasswordResetForbidden(List.of("SYSTEM_ADMIN"), List.of("SALES_STAFF", "SYSTEM_ADMIN"));
+    }
+
+    @Test
+    void shouldRejectSystemAdminResettingSuperAdmin() {
+        assertPasswordResetForbidden(List.of("SYSTEM_ADMIN"), List.of("SUPER_ADMIN"));
+    }
+
+    @Test
+    void shouldRejectBusinessRoleEvenWhenMethodAuthorityWasGranted() {
+        assertPasswordResetForbidden(List.of("SALES_MANAGER"), List.of("SALES_STAFF"));
+    }
+
+    @Test
+    void shouldRejectResettingOwnPassword() {
+        authenticate(List.of("SUPER_ADMIN"));
+        when(sysUserMapper.selectById(9L)).thenReturn(user(9L, "admin", 1));
+        when(sysUserMapper.selectAllRoleCodesByUserId(9L)).thenReturn(List.of("SUPER_ADMIN"));
+
+        assertThatThrownBy(() -> userService.resetPassword(9L, resetPasswordDto()))
+                .isInstanceOf(ForbiddenPasswordResetException.class)
+                .hasMessageContaining("修改密码功能");
+
+        verify(passwordEncoder, never()).encode(any());
+        verify(sysUserMapper, never()).updatePasswordHash(any(), any(), any(), any());
+    }
+
+    @Test
+    void shouldRejectMissingResetTarget() {
+        authenticate(List.of("SUPER_ADMIN"));
+        when(sysUserMapper.selectById(404L)).thenReturn(null);
+
+        assertThatThrownBy(() -> userService.resetPassword(404L, resetPasswordDto()))
+                .isInstanceOf(UserNotFoundException.class);
+
+        verify(passwordEncoder, never()).encode(any());
+        verify(sysUserMapper, never()).updatePasswordHash(any(), any(), any(), any());
+    }
+
+    @Test
+    void resetPasswordShouldBeTransactional() throws Exception {
+        assertThat(UserServiceImpl.class.getMethod("resetPassword", Long.class, ResetUserPasswordDTO.class)
+                .isAnnotationPresent(Transactional.class)).isTrue();
+    }
+
     private void assignUserIdOnInsert(Long id) {
         doAnswer(invocation -> {
             invocation.<SysUser>getArgument(0).setId(id);
@@ -395,6 +475,56 @@ class UserServiceImplTest {
         dto.setStatus(1);
         dto.setRoleIds(roleIds);
         return dto;
+    }
+
+    private ResetUserPasswordDTO resetPasswordDto() {
+        ResetUserPasswordDTO dto = new ResetUserPasswordDTO();
+        dto.setNewPassword("NewPassword123");
+        return dto;
+    }
+
+    private void assertPasswordResetAllowed(
+            List<String> operatorRoles,
+            List<String> targetRoles,
+            int targetStatus
+    ) {
+        authenticate(operatorRoles);
+        when(sysUserMapper.selectById(201L)).thenReturn(user(201L, "target", targetStatus));
+        when(sysUserMapper.selectAllRoleCodesByUserId(201L)).thenReturn(targetRoles);
+        when(passwordEncoder.encode("NewPassword123")).thenReturn("bcrypt-hash");
+        when(sysUserMapper.updatePasswordHash(
+                org.mockito.ArgumentMatchers.eq(201L),
+                org.mockito.ArgumentMatchers.eq("bcrypt-hash"),
+                org.mockito.ArgumentMatchers.eq(9L),
+                org.mockito.ArgumentMatchers.any()
+        )).thenReturn(1);
+
+        userService.resetPassword(201L, resetPasswordDto());
+
+        verify(passwordEncoder).encode("NewPassword123");
+        verify(sysUserMapper).updatePasswordHash(
+                org.mockito.ArgumentMatchers.eq(201L),
+                org.mockito.ArgumentMatchers.eq("bcrypt-hash"),
+                org.mockito.ArgumentMatchers.eq(9L),
+                org.mockito.ArgumentMatchers.any()
+        );
+        verify(sysUserMapper, never()).updateById(any(SysUser.class));
+        verify(sysUserRoleMapper, never()).delete(any(Wrapper.class));
+        verify(sysUserRoleMapper, never()).insert(any(SysUserRole.class));
+    }
+
+    private void assertPasswordResetForbidden(List<String> operatorRoles, List<String> targetRoles) {
+        authenticate(operatorRoles);
+        when(sysUserMapper.selectById(201L)).thenReturn(user(201L, "target", 1));
+        when(sysUserMapper.selectAllRoleCodesByUserId(201L)).thenReturn(targetRoles);
+
+        assertThatThrownBy(() -> userService.resetPassword(201L, resetPasswordDto()))
+                .isInstanceOf(ForbiddenPasswordResetException.class);
+
+        verify(passwordEncoder, never()).encode(any());
+        verify(sysUserMapper, never()).updatePasswordHash(any(), any(), any(), any());
+        verify(sysUserRoleMapper, never()).delete(any(Wrapper.class));
+        verify(sysUserRoleMapper, never()).insert(any(SysUserRole.class));
     }
 
     private SysRole role(Long id) {

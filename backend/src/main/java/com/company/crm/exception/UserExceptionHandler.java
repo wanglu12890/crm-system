@@ -31,6 +31,11 @@ public class UserExceptionHandler {
         return problem(HttpStatus.FORBIDDEN, exception.getMessage(), "USER_UPDATE_FORBIDDEN", "用户编辑失败");
     }
 
+    @ExceptionHandler(ForbiddenPasswordResetException.class)
+    public ResponseEntity<ProblemDetail> handleForbiddenPasswordReset(ForbiddenPasswordResetException exception) {
+        return problem(HttpStatus.FORBIDDEN, exception.getMessage(), "PASSWORD_RESET_FORBIDDEN", "密码重置失败");
+    }
+
     @ExceptionHandler(UserNotFoundException.class)
     public ResponseEntity<ProblemDetail> handleUserNotFound(UserNotFoundException exception) {
         return problem(HttpStatus.NOT_FOUND, exception.getMessage(), "USER_NOT_FOUND", "用户编辑失败");

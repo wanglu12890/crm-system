@@ -2,6 +2,7 @@ package com.company.crm.service.impl;
 
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.company.crm.dto.user.CreateUserDTO;
+import com.company.crm.dto.user.ResetUserPasswordDTO;
 import com.company.crm.dto.user.UpdateUserDTO;
 import com.company.crm.entity.SysRole;
 import com.company.crm.entity.SysUser;
@@ -10,6 +11,7 @@ import com.company.crm.exception.DuplicateUsernameException;
 import com.company.crm.exception.InvalidUserRoleException;
 import com.company.crm.exception.ForbiddenRoleAssignmentException;
 import com.company.crm.exception.ForbiddenUserUpdateException;
+import com.company.crm.exception.ForbiddenPasswordResetException;
 import com.company.crm.exception.UserNotFoundException;
 import com.company.crm.mapper.SysRoleMapper;
 import com.company.crm.mapper.SysUserRoleMapper;
@@ -189,6 +191,30 @@ public class UserServiceImpl implements UserService{
         log.info("Update user success, operatorUserId={}, targetUserId={}", operatorId, userId);
     }
 
+    @Override
+    @Transactional
+    public void resetPassword(Long userId, ResetUserPasswordDTO dto) {
+        SecurityUser operatorUser = currentSecurityUser();
+        Long operatorId = operatorUser == null ? null : operatorUser.getUserId();
+
+        SysUser targetUser = sysUserMapper.selectById(userId);
+        if (targetUser == null) {
+            throw new UserNotFoundException(userId);
+        }
+
+        List<String> targetRoleCodes = sysUserMapper.selectAllRoleCodesByUserId(userId);
+        validatePasswordResetScope(operatorUser, targetUser, targetRoleCodes);
+
+        String passwordHash = passwordEncoder.encode(dto.getNewPassword());
+        int updatedRows = sysUserMapper.updatePasswordHash(userId, passwordHash, operatorId, LocalDateTime.now());
+        if (updatedRows == 0) {
+            throw new UserNotFoundException(userId);
+        }
+
+        log.info("Reset user password success, operatorUserId={}, targetUserId={}, targetUsername={}",
+                operatorId, userId, targetUser.getUsername());
+    }
+
     private SecurityUser currentSecurityUser() {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         return authentication != null && authentication.getPrincipal() instanceof SecurityUser securityUser
@@ -210,6 +236,35 @@ public class UserServiceImpl implements UserService{
             return;
         }
         rejectUserUpdate(operatorId, targetUser.getId(), "当前用户无权编辑目标用户");
+    }
+
+    private void validatePasswordResetScope(
+            SecurityUser operatorUser,
+            SysUser targetUser,
+            List<String> targetRoleCodes
+    ) {
+        Long operatorId = operatorUser == null ? null : operatorUser.getUserId();
+        if (operatorId != null && operatorId.equals(targetUser.getId())) {
+            rejectPasswordReset(operatorId, targetUser.getId(), "请通过修改密码功能修改当前账号密码");
+        }
+        if (targetRoleCodes.contains(SUPER_ADMIN)) {
+            rejectPasswordReset(operatorId, targetUser.getId(), "不能通过管理员入口重置超级管理员密码");
+        }
+
+        List<String> operatorRoles = operatorUser == null ? List.of() : operatorUser.getRoles();
+        if (operatorRoles.contains(SUPER_ADMIN)) {
+            return;
+        }
+        if (operatorRoles.contains(SYSTEM_ADMIN) && !targetRoleCodes.contains(SYSTEM_ADMIN)) {
+            return;
+        }
+        rejectPasswordReset(operatorId, targetUser.getId(), "当前用户无权重置目标用户密码");
+    }
+
+    private void rejectPasswordReset(Long operatorId, Long targetUserId, String reason) {
+        log.warn("Reset user password rejected, operatorUserId={}, targetUserId={}, reason={}",
+                operatorId, targetUserId, reason);
+        throw new ForbiddenPasswordResetException(reason);
     }
 
     private boolean isRootSuperAdmin(SysUser targetUser, List<String> targetRoleCodes) {

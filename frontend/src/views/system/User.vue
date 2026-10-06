@@ -5,6 +5,7 @@ import { ElMessage } from 'element-plus'
 import UserDialog from '@/components/system/user/UserDialog.vue'
 import UserSearch from '@/components/system/user/UserSearch.vue'
 import UserTable from '@/components/system/user/UserTable.vue'
+import UserResetPasswordDialog from '@/components/system/user/UserResetPasswordDialog.vue'
 import { getUserList } from '@/api/user'
 import { getRoleList } from '@/api/role'
 import { ApiProblemDetail } from '@/utils/request'
@@ -25,6 +26,10 @@ const canUpdateUser = computed(
   () => authStore.hasPermission('user:update')
     && authStore.hasPermission('user:assign_role')
 )
+const canResetPassword = computed(
+  () => authStore.hasPermission('user:reset_password')
+    && (authStore.hasRole('SUPER_ADMIN') || authStore.hasRole('SYSTEM_ADMIN'))
+)
 
 const canEditTargetUser = (user: User): boolean => {
   if (!canUpdateUser.value) return false  // 没有权限
@@ -33,6 +38,14 @@ const canEditTargetUser = (user: User): boolean => {
   return !user.roleCodes.some( // 目标用户的角色中是否包含超级管理员或系统管理员
     (roleCode) => roleCode === 'SUPER_ADMIN' || roleCode === 'SYSTEM_ADMIN'
   )
+}
+
+const canResetTargetPassword = (user: User): boolean => {
+  if (!canResetPassword.value) return false
+  if (String(authStore.currentUser?.id) === user.id) return false
+  if (user.roleCodes.includes('SUPER_ADMIN')) return false
+  if (authStore.hasRole('SUPER_ADMIN')) return true
+  return authStore.hasRole('SYSTEM_ADMIN') && !user.roleCodes.includes('SYSTEM_ADMIN')
 }
 
 const users = ref<User[]>([])
@@ -87,6 +100,8 @@ const dialogMode = ref<UserDialogMode>('create')
 
 // 定义正在编辑的用户对象，初始为 null，表示没有正在编辑的用户
 const editingUser = ref<User | null>(null)
+const resetPasswordVisible = ref(false)
+const resetPasswordUser = ref<User | null>(null)
 
 const filteredUsers = computed(() => {
   const keyword = searchCriteria.value.username.toLowerCase()
@@ -145,6 +160,11 @@ const handleDelete = async (user: User) => {
   }
 }
 
+const handleResetPassword = (user: User) => {
+  resetPasswordUser.value = user
+  resetPasswordVisible.value = true
+}
+
 const handleSuccess = async () => {
   await loadUsers() // 重新加载用户列表以获取最新数据
   dialogVisible.value = false
@@ -184,8 +204,11 @@ const handleSizeChange = (size: number) => {
       :roles="roles"
       :show-edit="canUpdateUser"
       :can-edit="canEditTargetUser"
+      :show-reset-password="canResetPassword"
+      :can-reset-password="canResetTargetPassword"
       @edit="handleEdit"
       @delete="handleDelete"
+      @reset-password="handleResetPassword"
     />
 
     <!-- 用户分页组件 -->
@@ -208,6 +231,11 @@ const handleSizeChange = (size: number) => {
       :user="editingUser"
       :roles="roles"
       @success="handleSuccess"     
+    />
+
+    <UserResetPasswordDialog
+      v-model="resetPasswordVisible"
+      :user="resetPasswordUser"
     />
   </section>
 </template>

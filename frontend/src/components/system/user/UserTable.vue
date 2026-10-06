@@ -10,11 +10,14 @@ const props = defineProps<{
   roles: Role[]
   showEdit: boolean
   canEdit: (user: User) => boolean
+  showResetPassword: boolean
+  canResetPassword: (user: User) => boolean
 }>()
 
 const emit = defineEmits<{
   edit: [user: User]
   delete: [user: User]
+  resetPassword: [user: User]
 }>()
 </script>
 
@@ -42,7 +45,7 @@ const emit = defineEmits<{
       </template>
     </el-table-column>
     <el-table-column prop="createTime" label="创建时间" min-width="130" align="center" />
-    <el-table-column label="操作" width="180" fixed="right" align="center">
+    <el-table-column label="操作" width="260" fixed="right" align="center">
       <template #default="{ row }: { row: User }">
         <el-tooltip
           v-if="showEdit"
@@ -59,6 +62,12 @@ const emit = defineEmits<{
             >编辑</el-button>
           </span>
         </el-tooltip>
+        <el-button
+          v-if="showResetPassword && props.canResetPassword(row)"
+          link
+          type="warning"
+          @click="emit('resetPassword', row)"
+        >重置密码</el-button>
         <el-button link type="danger" @click="emit('delete', row)">删除</el-button>
       </template>
     </el-table-column>

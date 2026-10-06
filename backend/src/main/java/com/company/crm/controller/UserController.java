@@ -1,6 +1,7 @@
 package com.company.crm.controller;
 
 import com.company.crm.dto.user.CreateUserDTO;
+import com.company.crm.dto.user.ResetUserPasswordDTO;
 import com.company.crm.dto.user.UpdateUserDTO;
 import com.company.crm.service.UserService;
 import com.company.crm.vo.user.UserListVO;
@@ -45,5 +46,15 @@ public class UserController {
     ) {
         userService.updateUser(id, dto);
         return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/{id}/reset-password")
+    @PreAuthorize("hasAuthority('user:reset_password')")
+    public ResponseEntity<Void> resetPassword(
+            @PathVariable Long id,
+            @Valid @RequestBody ResetUserPasswordDTO dto
+    ) {
+        userService.resetPassword(id, dto);
+        return ResponseEntity.ok().build();
     }
 }
