@@ -104,7 +104,7 @@ CREATE TABLE IF NOT EXISTS customer (
   province VARCHAR(64) NULL,
   city VARCHAR(64) NULL,
   address VARCHAR(500) NULL,
-  owner_id BIGINT NOT NULL COMMENT '负责人',
+  owner_id BIGINT NULL COMMENT '负责人，NULL表示公海客户',
   status VARCHAR(32) NOT NULL DEFAULT 'POTENTIAL' COMMENT 'POTENTIAL/ACTIVE/INACTIVE',
   remark VARCHAR(1000) NULL,
   created_by BIGINT NOT NULL,
@@ -210,6 +210,7 @@ CREATE TABLE IF NOT EXISTS follow_record (
   id BIGINT NOT NULL,
   target_type VARCHAR(32) NOT NULL COMMENT 'CUSTOMER/CLUE/BUSINESS',
   target_id BIGINT NOT NULL COMMENT '业务对象ID，多态关联由Service校验',
+  contact_id BIGINT NULL COMMENT '本次跟进涉及的联系人',
   follow_type VARCHAR(32) NOT NULL COMMENT 'PHONE/VISIT/EMAIL/IM/OTHER',
   content TEXT NOT NULL,
   follow_at DATETIME(3) NOT NULL,
@@ -224,6 +225,7 @@ CREATE TABLE IF NOT EXISTS follow_record (
   PRIMARY KEY (id),
   KEY idx_follow_record_target (target_type, target_id, follow_at),
   KEY idx_follow_record_next (owner_id, next_follow_at, deleted),
+  CONSTRAINT fk_follow_record_contact FOREIGN KEY (contact_id) REFERENCES contact (id),
   CONSTRAINT fk_follow_record_owner FOREIGN KEY (owner_id) REFERENCES sys_user (id)
 ) ENGINE=InnoDB COMMENT='跟进记录';
 

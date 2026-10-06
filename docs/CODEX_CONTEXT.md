@@ -18,8 +18,9 @@
 
 - 项目名称：`crm-system`，企业内部 B 端 CRM。
 - 采用前后端分离架构：Spring Boot REST API + Vue SPA。
-- 当前可工作的业务重点是认证与系统管理（用户、角色、权限）。
-- 客户、联系人、跟进、线索、商机、合同、数据分析和 AI 分析目前仅有数据库表或前端占位入口，没有业务 Controller/Service/API 实现。
+- System Management V1（认证、用户、角色、权限）已完成当前计划范围。
+- Customer Management V1 已进入业务规则冻结 / schema 准备阶段；客户、联系人、跟进仍没有业务 Controller/Service/API 实现。
+- 线索、商机、合同、数据分析和 AI 分析目前仅有数据库表或前端占位入口，没有业务 Controller/Service/API 实现。
 - 后端 context path 为 `/api`；Controller 路径不得再次包含 `/api`。
 
 ## 3. Technology Stack
@@ -372,6 +373,12 @@ ROLE_SUPER_ADMIN AND permission:list
 - 新增列表/关联接口应延续字符串 ID 策略。
 - `/auth/me` 当前仍将用户 ID 声明为后端 Long、前端 number；这是现存不一致，见 Known Issues。
 
+### Customer V1 Schema Facts
+
+- `customer.owner_id` 可为空，仍通过 FK 关联 `sys_user.id`；NULL 表示公海客户，非 NULL 表示已分配客户。
+- `follow_record.contact_id` 可为空，并通过 FK 关联 `contact.id`；它表示本次跟进可选涉及的具体联系人。
+- `follow_record` 原有 `target_type + target_id` 多态目标结构保持不变。
+
 ## 17. Exception and Security Conventions
 
 - 401：未认证、无效/过期 JWT、登录凭证错误或账号不可用。
@@ -417,9 +424,21 @@ npm.cmd run build
 | User Management | list/create/edit/role binding/reset password | Implemented | 前端本地搜索分页；无删除接口 |
 | Role Management | list/create/edit/permission read-save | Implemented | 创建/编辑/权限配置受 SUPER_ADMIN 边界保护；无删除接口 |
 | Permission Management | tree/list/overview | Implemented | 只读管理视图，无权限 CRUD |
-| Customer/Contact | schema + menu placeholder | Not implemented | 无后端业务层和真实前端页面 |
-| Clue/Opportunity/Follow-up/Contract | schema + menu placeholder | Not implemented | 无后端业务层和真实前端页面 |
+| Customer/Contact/Follow-up | rules frozen + schema preparation | Not implemented | V1 规则已冻结并完成两处最小 schema 调整；无业务层和真实前端页面 |
+| Clue/Opportunity/Contract | schema + menu placeholder | Not implemented | 无后端业务层和真实前端页面 |
 | Analytics/AI | menu placeholder | Not implemented | 无真实数据或 API |
+
+### Customer Management V1 Baseline
+
+- Customer、Contact、FollowRecord 是下一阶段活动领域；完整冻结规则见 `docs/customer-management/CUSTOMER_V1_RULES.md`。
+- `customer.owner_id IS NULL` 表示公海；非 NULL 表示已分配客户。
+- V1 数据范围只采用 ALL / SELF：SUPER_ADMIN、SYSTEM_ADMIN、SALES_MANAGER 为 ALL，SALES_STAFF 为 SELF。
+- SUPER_ADMIN、SYSTEM_ADMIN 可查看但不领取公海，也不创建跟进记录；SALES_MANAGER、SALES_STAFF 可领取公海并创建跟进。
+- Contact 访问继承所属 Customer；每个 Customer 最多一个主要 Contact。
+- FollowRecord 可选关联 Contact；`owner_id` 表示实际跟进执行人，`created_by` 表示记录创建人。
+- Customer V1 不提供客户删除；Contact 删除采用逻辑删除；FollowRecord V1 只提供列表和新增。
+- 公海领取必须通过带 `owner_id IS NULL AND deleted=0` 条件的原子更新防止并发重复领取。
+- 以上是未来实现基线，不表示 Customer 数据范围、权限或业务接口已经实现。
 
 ## 20. Known Issues and Deferred Work
 
