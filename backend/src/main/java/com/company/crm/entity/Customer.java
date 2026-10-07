@@ -9,35 +9,30 @@ import lombok.Data;
 
 import java.time.LocalDateTime;
 
+/** Customer persistence model. API responses use dedicated VO types. */
 @Data
-@TableName("sys_user")
-public class SysUser {
+@TableName("customer")
+public class Customer {
 
     @TableId(type = IdType.ASSIGN_ID)
     private Long id;
-
-    private String username;
-
-    private String passwordHash;
-
-    private String realName;
-
-    private String mobile;
-
+    private String customerNo;
+    private String customerName;
+    private String customerType;
+    private String customerLevel;
+    private String industry;
+    private String source;
+    private String phone;
     private String email;
-
-    private Long deptId;
-
-    private Integer status;
-
-    private LocalDateTime lastLoginAt;
-
+    private String province;
+    private String city;
+    private String address;
+    private Long ownerId;
+    private String status;
+    private String remark;
     private Long createdBy;
-
     private Long updatedBy;
-
     private LocalDateTime createdAt;
-
     private LocalDateTime updatedAt;
 
     @TableLogic

@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.company.crm.mapper.CustomerMapper">
+
+    <select id="selectCustomerPage" resultType="com.company.crm.vo.customer.CustomerListVO">
+        SELECT CAST(c.id AS CHAR)            AS id,
+               c.customer_no                AS customerNo,
+               c.customer_name              AS customerName,
+               c.customer_type              AS customerType,
+               c.customer_level             AS customerLevel,
+               c.industry,
+               c.status,
+               CAST(c.owner_id AS CHAR)      AS ownerId,
+               owner.real_name              AS ownerName,
+               c.updated_at                  AS updatedAt
+          FROM customer c
+          LEFT JOIN sys_user owner ON owner.id = c.owner_id
+         WHERE c.deleted = 0
+           AND c.owner_id IS NOT NULL
+        <if test="query.keyword != null and query.keyword.trim() != ''">
+           AND (c.customer_no LIKE CONCAT('%', #{query.keyword}, '%')
+                OR c.customer_name LIKE CONCAT('%', #{query.keyword}, '%'))
+        </if>
+        <if test="query.customerLevel != null and query.customerLevel != ''">
+           AND c.customer_level = #{query.customerLevel}
+        </if>
+        <if test="query.status != null and query.status != ''">
+           AND c.status = #{query.status}
+        </if>
+        <if test="query.customerType != null and query.customerType != ''">
+           AND c.customer_type = #{query.customerType}
+        </if>
+        <if test="query.ownerId != null">
+           AND c.owner_id = #{query.ownerId}
+        </if>
+        <choose>
+            <when test="dataScope.scopeCode == 'DEPT'">
+           AND owner.dept_id = #{dataScope.deptId}
+            </when>
+            <when test="dataScope.scopeCode == 'SELF'">
+           AND c.owner_id = #{dataScope.userId}
+            </when>
+            <when test="dataScope.scopeCode == 'ALL'">
+                <!-- ALL adds no owner restriction; public-pool exclusion still applies above. -->
+            </when>
+            <otherwise>
+           AND 1 = 0
+            </otherwise>
+        </choose>
+         ORDER BY c.updated_at DESC, c.id DESC
+    </select>
+</mapper>

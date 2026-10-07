@@ -38,4 +38,27 @@ public interface SysRoleMapper extends BaseMapper<SysRole> {
                AND deleted = 0
             """)
     String selectRoleCodeById(@Param("roleId") Long roleId);
+
+    /**
+     * Only roles that currently contribute the requested enabled permission may
+     * participate in data-scope resolution.
+     */
+    @Select("""
+            SELECT DISTINCT r.data_scope
+              FROM sys_user_role ur
+              JOIN sys_role r
+                ON r.id = ur.role_id
+               AND r.status = 1
+               AND r.deleted = 0
+              JOIN sys_role_permission rp ON rp.role_id = r.id
+              JOIN sys_permission p
+                ON p.id = rp.permission_id
+               AND p.status = 1
+             WHERE ur.user_id = #{userId}
+               AND p.permission_code = #{permissionCode}
+            """)
+    List<String> selectGrantedDataScopes(
+            @Param("userId") Long userId,
+            @Param("permissionCode") String permissionCode
+    );
 }

@@ -19,7 +19,7 @@
 - 项目名称：`crm-system`，企业内部 B 端 CRM。
 - 采用前后端分离架构：Spring Boot REST API + Vue SPA。
 - System Management V1（认证、用户、角色、权限）已完成当前计划范围。
-- Customer Management V1 已进入业务规则冻结 / schema 准备阶段；客户、联系人、跟进仍没有业务 Controller/Service/API 实现。
+- Customer Management V1 已完成受 JWT 与 `customer:list` 保护的客户列表后端查询；联系人、跟进仍没有业务 Controller/Service/API 实现。
 - 线索、商机、合同、数据分析和 AI 分析目前仅有数据库表或前端占位入口，没有业务 Controller/Service/API 实现。
 - 后端 context path 为 `/api`；Controller 路径不得再次包含 `/api`。
 
@@ -166,6 +166,7 @@ sys_user
 - 用户：`user:list`、`user:create`、`user:update`、`user:delete`、`user:assign_role`、`user:reset_password`。
 - 角色：`role:list`、`role:create`、`role:update`、`role:delete`、`role:assign_permission`。
 - 权限管理：`permission:list`。
+- Customer V1：`customer:list/create/update`、`customer_pool:list/claim`、`contact:list/create/update/delete`、`follow:list/create`。
 - 菜单节点使用 `system:user`、`system:role`、`system:permission` 等编码，但菜单编码不等同于接口操作权限。
 - 部分权限已存在于 SQL 数据但还没有对应业务接口，例如 delete 权限。
 
@@ -379,10 +380,14 @@ ROLE_SUPER_ADMIN AND permission:list
 - `sys_user.dept_id → sys_department.id` 已建立；当前模型为一名用户最多归属一个部门，NULL 表示未归属。
 - Customer V1 开发数据预置了 `SALES_DEPT_01`（销售一部）和 `SALES_DEPT_02`（销售二部），并为指定的 5 个销售测试账号规划了部门归属。
 - `SALES_MANAGER.data_scope` 已切换为 `DEPT`；`SUPER_ADMIN` / `SYSTEM_ADMIN` 保持 `ALL`，`SALES_STAFF` 保持 `SELF`。
+- Customer V1 的 11 个功能权限码已进入初始化数据；SUPER_ADMIN / SYSTEM_ADMIN 绑定 9 个（不含 `customer_pool:claim`、`follow:create`），SALES_MANAGER / SALES_STAFF 绑定全部 11 个。
+- Customer 功能权限与 `sys_role.data_scope` 独立：前者决定能否使用功能，后者决定可访问的 Customer 范围。
 - Customer 不冗余 `dept_id`；DEPT 归属通过 `customer.owner_id → sys_user.dept_id → sys_department.id` 推导。
 - `customer.owner_id IS NULL` 的公海客户不属于具体 DEPT，由独立公海列表与领取规则处理。
 - `sys_department.parent_id` 为未来组织层级和 DEPT_AND_CHILD 预留；当前没有 Department Entity、CRUD 或组织树 API。
-- Customer DEPT 数据过滤和 Customer List 尚未实现。
+- Customer List 已实现 ALL / DEPT / SELF 数据范围过滤；DEPT 通过 `customer.owner_id → sys_user.dept_id` 约束客户归属。
+- `GET /api/customers` 仅返回 `deleted=0 AND owner_id IS NOT NULL` 的已分配客户，公海客户不进入普通客户列表。
+- Customer List 的有效数据范围只取自实际授予 `customer:list` 的启用角色，优先级为 ALL > DEPT > SELF；DEPT 用户缺少部门时明确拒绝访问。
 - `customer.owner_id` 可为空，仍通过 FK 关联 `sys_user.id`；NULL 表示公海客户，非 NULL 表示已分配客户。
 - `follow_record.contact_id` 可为空，并通过 FK 关联 `contact.id`；它表示本次跟进可选涉及的具体联系人。
 - `follow_record` 原有 `target_type + target_id` 多态目标结构保持不变。
@@ -432,7 +437,7 @@ npm.cmd run build
 | User Management | list/create/edit/role binding/reset password | Implemented | 前端本地搜索分页；无删除接口 |
 | Role Management | list/create/edit/permission read-save | Implemented | 创建/编辑/权限配置受 SUPER_ADMIN 边界保护；无删除接口 |
 | Permission Management | tree/list/overview | Implemented | 只读管理视图，无权限 CRUD |
-| Customer/Contact/Follow-up | rules frozen + schema preparation | Not implemented | V1 规则已冻结并完成两处最小 schema 调整；无业务层和真实前端页面 |
+| Customer/Contact/Follow-up | customer list backend + rules/schema | Partially implemented | `GET /api/customers` 已实现分页、筛选与 ALL/DEPT/SELF 范围；无客户详情/写接口、联系人/跟进业务层和真实前端页面 |
 | Clue/Opportunity/Contract | schema + menu placeholder | Not implemented | 无后端业务层和真实前端页面 |
 | Analytics/AI | menu placeholder | Not implemented | 无真实数据或 API |
 
@@ -440,13 +445,13 @@ npm.cmd run build
 
 - Customer、Contact、FollowRecord 是下一阶段活动领域；完整冻结规则见 `docs/customer-management/CUSTOMER_V1_RULES.md`。
 - `customer.owner_id IS NULL` 表示公海；非 NULL 表示已分配客户。
-- V1 角色范围配置为：SUPER_ADMIN、SYSTEM_ADMIN 为 ALL，SALES_MANAGER 为 DEPT，SALES_STAFF 为 SELF；Customer DEPT 查询过滤尚未实现。
+- V1 角色范围配置为：SUPER_ADMIN、SYSTEM_ADMIN 为 ALL，SALES_MANAGER 为 DEPT，SALES_STAFF 为 SELF；Customer List 已按实际授权角色的 `data_scope` 执行 ALL / DEPT / SELF 过滤。
 - SUPER_ADMIN、SYSTEM_ADMIN 可查看但不领取公海，也不创建跟进记录；SALES_MANAGER、SALES_STAFF 可领取公海并创建跟进。
 - Contact 访问继承所属 Customer；每个 Customer 最多一个主要 Contact。
 - FollowRecord 可选关联 Contact；`owner_id` 表示实际跟进执行人，`created_by` 表示记录创建人。
 - Customer V1 不提供客户删除；Contact 删除采用逻辑删除；FollowRecord V1 只提供列表和新增。
 - 公海领取必须通过带 `owner_id IS NULL AND deleted=0` 条件的原子更新防止并发重复领取。
-- 以上是未来实现基线，不表示 Customer 数据范围、权限或业务接口已经实现。
+- 除已完成的 Customer List 查询及其数据范围外，其余 Customer 写操作、详情、公海、Contact 与 FollowRecord 能力仍是后续实现基线。
 
 ## 20. Known Issues and Deferred Work
 
