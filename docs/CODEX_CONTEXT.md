@@ -375,6 +375,14 @@ ROLE_SUPER_ADMIN AND permission:list
 
 ### Customer V1 Schema Facts
 
+- `sys_department` 已作为最小部门基础模型建立，包含稳定部门编码、nullable `parent_id` 层级、自引用 FK、启停状态、排序、时间和逻辑删除字段。
+- `sys_user.dept_id → sys_department.id` 已建立；当前模型为一名用户最多归属一个部门，NULL 表示未归属。
+- Customer V1 开发数据预置了 `SALES_DEPT_01`（销售一部）和 `SALES_DEPT_02`（销售二部），并为指定的 5 个销售测试账号规划了部门归属。
+- `SALES_MANAGER.data_scope` 已切换为 `DEPT`；`SUPER_ADMIN` / `SYSTEM_ADMIN` 保持 `ALL`，`SALES_STAFF` 保持 `SELF`。
+- Customer 不冗余 `dept_id`；DEPT 归属通过 `customer.owner_id → sys_user.dept_id → sys_department.id` 推导。
+- `customer.owner_id IS NULL` 的公海客户不属于具体 DEPT，由独立公海列表与领取规则处理。
+- `sys_department.parent_id` 为未来组织层级和 DEPT_AND_CHILD 预留；当前没有 Department Entity、CRUD 或组织树 API。
+- Customer DEPT 数据过滤和 Customer List 尚未实现。
 - `customer.owner_id` 可为空，仍通过 FK 关联 `sys_user.id`；NULL 表示公海客户，非 NULL 表示已分配客户。
 - `follow_record.contact_id` 可为空，并通过 FK 关联 `contact.id`；它表示本次跟进可选涉及的具体联系人。
 - `follow_record` 原有 `target_type + target_id` 多态目标结构保持不变。
@@ -432,7 +440,7 @@ npm.cmd run build
 
 - Customer、Contact、FollowRecord 是下一阶段活动领域；完整冻结规则见 `docs/customer-management/CUSTOMER_V1_RULES.md`。
 - `customer.owner_id IS NULL` 表示公海；非 NULL 表示已分配客户。
-- V1 数据范围只采用 ALL / SELF：SUPER_ADMIN、SYSTEM_ADMIN、SALES_MANAGER 为 ALL，SALES_STAFF 为 SELF。
+- V1 角色范围配置为：SUPER_ADMIN、SYSTEM_ADMIN 为 ALL，SALES_MANAGER 为 DEPT，SALES_STAFF 为 SELF；Customer DEPT 查询过滤尚未实现。
 - SUPER_ADMIN、SYSTEM_ADMIN 可查看但不领取公海，也不创建跟进记录；SALES_MANAGER、SALES_STAFF 可领取公海并创建跟进。
 - Contact 访问继承所属 Customer；每个 Customer 最多一个主要 Contact。
 - FollowRecord 可选关联 Contact；`owner_id` 表示实际跟进执行人，`created_by` 表示记录创建人。

@@ -10,6 +10,22 @@ USE crm_system;
 SET NAMES utf8mb4;
 SET FOREIGN_KEY_CHECKS = 0;
 
+CREATE TABLE IF NOT EXISTS sys_department (
+  id BIGINT NOT NULL COMMENT '雪花主键',
+  dept_code VARCHAR(64) NOT NULL COMMENT '部门编码',
+  dept_name VARCHAR(64) NOT NULL COMMENT '部门名称',
+  parent_id BIGINT NULL COMMENT '上级部门，NULL为顶级部门',
+  status TINYINT NOT NULL DEFAULT 1 COMMENT '0停用 1启用',
+  sort INT NOT NULL DEFAULT 0 COMMENT '显示排序',
+  created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+  deleted TINYINT NOT NULL DEFAULT 0 COMMENT '逻辑删除',
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_sys_department_code (dept_code),
+  KEY idx_sys_department_parent (parent_id),
+  CONSTRAINT fk_sys_department_parent FOREIGN KEY (parent_id) REFERENCES sys_department (id)
+) ENGINE=InnoDB COMMENT='部门';
+
 CREATE TABLE IF NOT EXISTS sys_user (
   id BIGINT NOT NULL COMMENT '雪花主键',
   username VARCHAR(64) NOT NULL COMMENT '登录名',
@@ -17,6 +33,7 @@ CREATE TABLE IF NOT EXISTS sys_user (
   real_name VARCHAR(64) NOT NULL COMMENT '真实姓名',
   mobile VARCHAR(32) NULL COMMENT '手机号',
   email VARCHAR(128) NULL COMMENT '邮箱',
+  dept_id BIGINT NULL COMMENT '所属部门，NULL表示未归属部门',
   status TINYINT NOT NULL DEFAULT 1 COMMENT '0停用 1启用',
   last_login_at DATETIME(3) NULL COMMENT '最后登录时间',
   created_by BIGINT NULL COMMENT '创建人',
@@ -28,7 +45,9 @@ CREATE TABLE IF NOT EXISTS sys_user (
   PRIMARY KEY (id),
   UNIQUE KEY uk_sys_user_username (username),
   KEY idx_sys_user_mobile (mobile),
-  KEY idx_sys_user_status (status, deleted)
+  KEY idx_sys_user_status (status, deleted),
+  KEY idx_sys_user_dept (dept_id),
+  CONSTRAINT fk_sys_user_department FOREIGN KEY (dept_id) REFERENCES sys_department (id)
 ) ENGINE=InnoDB COMMENT='系统用户';
 
 CREATE TABLE IF NOT EXISTS sys_role (
@@ -259,5 +278,31 @@ CREATE TABLE IF NOT EXISTS contract (
   CONSTRAINT chk_contract_amount CHECK (amount >= 0),
   CONSTRAINT chk_contract_dates CHECK (end_date IS NULL OR start_date IS NULL OR end_date >= start_date)
 ) ENGINE=InnoDB COMMENT='销售合同';
+
+-- Customer V1 销售团队基础数据。用稳定业务编码定位部门，不依赖显示名称。
+INSERT INTO sys_department (
+    id, dept_code, dept_name, parent_id, status, sort, created_at, updated_at, deleted
+)
+SELECT 2206070000000000001, 'SALES_DEPT_01', '销售一部', NULL, 1, 10,
+       CURRENT_TIMESTAMP(3), CURRENT_TIMESTAMP(3), 0
+WHERE NOT EXISTS (
+    SELECT 1 FROM sys_department WHERE dept_code = 'SALES_DEPT_01'
+);
+
+INSERT INTO sys_department (
+    id, dept_code, dept_name, parent_id, status, sort, created_at, updated_at, deleted
+)
+SELECT 2206070000000000002, 'SALES_DEPT_02', '销售二部', NULL, 1, 20,
+       CURRENT_TIMESTAMP(3), CURRENT_TIMESTAMP(3), 0
+WHERE NOT EXISTS (
+    SELECT 1 FROM sys_department WHERE dept_code = 'SALES_DEPT_02'
+);
+
+-- 新建库执行到此处时可能尚无 SALES_MANAGER；重复执行 init.sql 时会将已有角色收敛为 DEPT。
+UPDATE sys_role
+   SET data_scope = 'DEPT',
+       updated_at = CURRENT_TIMESTAMP(3)
+ WHERE role_code = 'SALES_MANAGER'
+   AND data_scope <> 'DEPT';
 
 SET FOREIGN_KEY_CHECKS = 1;

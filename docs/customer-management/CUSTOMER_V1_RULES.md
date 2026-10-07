@@ -40,7 +40,7 @@
 
 - 客户删除、客户转移、批量分配、批量导入和客户合并
 - 自动公海回收、保护期、客户容量、领取次数、审批和领取历史
-- 部门/组织树数据权限以及 `DEPT`、`DEPT_AND_CHILD`、`CUSTOM` 范围
+- `DEPT_AND_CHILD`、`CUSTOM`、跨部门管理和复杂组织树数据权限
 - 复杂客户分配历史和客户操作历史
 - 联系人独立负责人
 - 跟进记录编辑和删除
@@ -50,6 +50,7 @@
 
 ```mermaid
 erDiagram
+    SYS_DEPARTMENT o|--o{ SYS_USER : "dept_id"
     SYS_USER o|--o{ CUSTOMER : "owner_id; NULL means public pool"
     CUSTOMER ||--o{ CONTACT : "customer_id"
     SYS_USER ||--o{ FOLLOW_RECORD : "owner_id"
@@ -67,6 +68,8 @@ erDiagram
 - **Frozen Business Rule**：`customer.owner_id` 表示客户当前负责人。
 - `owner_id IS NOT NULL`：已分配客户。
 - `owner_id IS NULL`：公海客户。
+- **Frozen Business Rule**：Customer 不冗余保存 `dept_id`；已分配 Customer 的部门通过 `customer.owner_id → sys_user.id → sys_user.dept_id → sys_department.id` 推导。
+- **Frozen Business Rule**：`DEPT` 表示当前用户所属部门的已分配 Customer；未来 SALES_MANAGER 普通客户列表按 owner 用户的 `dept_id = currentUser.dept_id` 过滤。
 - 客户归属与客户生命周期状态相互独立；禁止用 `PUBLIC`、`POOL` 等 `customer.status` 值表达公海。
 - V1 不增加 `is_public`、`pool_status`、前负责人、入池时间、领取时间或分配历史。
 - **Planned Implementation**：后端必须根据当前认证用户和规则决定 owner，不能信任普通前端提交的 `owner_id`。
@@ -96,28 +99,31 @@ customer leaves public pool
 
 - **Frozen Business Rule**：V1 不实现自动回收、容量限制、保护期、领取历史或抢单日志。
 - **Planned Implementation**：查看公海需要独立功能权限，并始终使用 `owner_id IS NULL` 判断。
+- **Frozen Business Rule**：公海 Customer 没有 owner，因此不属于任何具体 DEPT，不进入 SALES_MANAGER 的普通 DEPT Customer List。
+- 公海查询和领取继续由 `customer_pool:list` / `customer_pool:claim` 独立控制。
 
 ## 6. Role and Data Scope Matrix
 
-V1 仅采用 `ALL` 和 `SELF`。当前没有部门表，`DEPT`、`DEPT_AND_CHILD`、`CUSTOM` 不进入 Customer V1。
+V1 正式采用 `ALL`、`DEPT` 和 `SELF`。`DEPT_AND_CHILD`、`CUSTOM` 不进入 Customer V1。
 
 | Feature | SUPER_ADMIN | SYSTEM_ADMIN | SALES_MANAGER | SALES_STAFF |
 |---|---|---|---|---|
-| 查看客户 | ALL | ALL | ALL | SELF |
+| 查看客户 | ALL | ALL | DEPT | SELF |
 | 新建客户 | Yes | Yes | Yes | Yes |
-| 编辑客户 | ALL | ALL | ALL | SELF |
+| 编辑客户 | ALL | ALL | DEPT | SELF |
 | 查看公海 | Yes | Yes | Yes | Yes |
 | 领取公海 | No | No | Yes | Yes |
-| 查看联系人 | ALL | ALL | ALL | 所属 SELF 客户 |
-| 新建联系人 | ALL | ALL | ALL | 所属 SELF 客户 |
-| 编辑联系人 | ALL | ALL | ALL | 所属 SELF 客户 |
-| 删除联系人 | ALL | ALL | ALL | 所属 SELF 客户 |
-| 查看跟进记录 | ALL | ALL | ALL | 所属 SELF 客户 |
+| 查看联系人 | ALL | ALL | 所属 DEPT 客户 | 所属 SELF 客户 |
+| 新建联系人 | ALL | ALL | 所属 DEPT 客户 | 所属 SELF 客户 |
+| 编辑联系人 | ALL | ALL | 所属 DEPT 客户 | 所属 SELF 客户 |
+| 删除联系人 | ALL | ALL | 所属 DEPT 客户 | 所属 SELF 客户 |
+| 查看跟进记录 | ALL | ALL | 所属 DEPT 客户 | 所属 SELF 客户 |
 | 新建跟进记录 | No | No | Yes | Yes |
 
 - `SELF`：仅允许访问 `customer.owner_id = currentUserId` 的已分配客户。
+- `DEPT`：仅允许访问 owner 用户与当前用户 `dept_id` 相同的已分配客户。
 - `ALL`：普通已分配客户查询不按 owner 限制。
-- 公海不归入 `SELF` 或普通 `ALL` 查询语义，由独立公海权限和 `owner_id IS NULL` 决定。
+- 公海不归入 `SELF`、`DEPT` 或普通 `ALL` 查询语义，由独立公海权限和 `owner_id IS NULL` 决定。
 - **Planned Implementation**：该矩阵尚未接入 Customer Service，不能把 `sys_role.data_scope` 字段存在误述为已实现数据权限。
 
 ## 7. Customer Creation
@@ -293,19 +299,20 @@ WHERE id = ?
 
 ## 19. Schema Changes for V1
 
-本轮仅批准并已写入 `database/init.sql` 的两项 schema 变化：
+与 Customer 业务表直接相关并已写入 `database/init.sql` 的 schema 变化为：
 
 1. `customer.owner_id BIGINT NULL`，保留 `fk_customer_owner → sys_user(id)` 和原索引；NULL 是公海客户。
 2. `follow_record.contact_id BIGINT NULL`，新增 `fk_follow_record_contact → contact(id)`；表示可选的被跟进联系人。
 
 没有增加公海状态、历史表或其他业务字段。`target_type + target_id`、`follow_record.owner_id` 及原索引保持不变。
 
+系统组织基础已另行建立 `sys_department` 和 `sys_user.dept_id`。Customer 本身不增加 `dept_id`，部门范围始终通过 owner 用户推导。
+
 ## 20. Implementation Notes
 
-- 当前尚未实现 Customer/Contact/FollowRecord Entity、Mapper、Service、Controller、前端页面、权限数据或测试数据。
+- 当前已有 Customer/Contact/FollowRecord 开发 fixture，但尚未实现该领域的 Entity、Mapper、Service、Controller、前端页面和 DEPT 查询过滤。
 - 业务 Long/BIGINT ID 对前端应继续按 string 输出。
 - Customer、Contact、FollowRecord 的 Entity 应按现有全局约定映射逻辑删除和乐观锁。
 - owner、数据范围、父对象访问和多态目标校验必须由后端完成。
 - 正式开发前应先生成对应测试用例；实现写操作时确保授权失败无副作用。
 - 对现有开发数据库的结构升级必须由用户手动执行一次性 ALTER SQL；修改 `init.sql` 本身不会升级已有实例。
-

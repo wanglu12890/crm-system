@@ -10,9 +10,9 @@ SET NAMES utf8mb4;
 -- ==================================================
 -- 1. Safety Notes
 -- ==================================================
--- This script never creates or modifies sys_user, sys_role or sys_user_role.
--- It relies on exactly three existing development users listed below.
--- STOP if the pre-check does not return all three expected enabled, non-deleted users.
+-- This script never creates or modifies sys_department, sys_user, sys_role or sys_user_role.
+-- It relies on exactly five existing development users and their department membership.
+-- STOP unless every pre-check row matches its expected identity, role, department and enabled state.
 -- Fixed test ID ranges:
 --   customer:      2206100000000000001 - 2206100000000000024
 --   contact:       2206101000000000001 - 2206101000000000027
@@ -20,32 +20,64 @@ SET NAMES utf8mb4;
 -- Test customer numbers use TEST-CUST-V1-### and do not represent the future production numbering algorithm.
 
 -- ==================================================
--- 2. Pre-check Users (run and inspect before importing)
+-- 2. Pre-check Users, Departments and Role Scopes (run and inspect before importing)
 -- ==================================================
--- SELECT
---     id,
---     username,
---     real_name,
---     status,
---     deleted
--- FROM sys_user
--- WHERE id IN (
---     2107447193143648258,
---     2107447512812527618,
---     2107447685940813826
--- )
--- ORDER BY id;
+-- Expected: exactly five rows. Every actual value must be non-NULL and equal to its expected value.
+-- If any row is missing or mismatched: STOP. Do not execute the fixture transaction.
+SELECT
+    expected.user_id AS expected_user_id,
+    expected.username AS expected_username,
+    expected.role_code AS expected_role_code,
+    expected.dept_id AS expected_dept_id,
+    expected.dept_code AS expected_dept_code,
+    u.id AS actual_user_id,
+    u.username AS actual_username,
+    CASE WHEN ur.user_id IS NOT NULL THEN r.role_code END AS actual_role_code,
+    u.status,
+    u.deleted,
+    u.dept_id AS actual_dept_id,
+    d.dept_code AS actual_dept_code
+FROM (
+    SELECT 2107447193143648258 AS user_id, 'sales_manager01' AS username,
+           'SALES_MANAGER' AS role_code, 2206070000000000001 AS dept_id,
+           'SALES_DEPT_01' AS dept_code
+    UNION ALL SELECT 2107447512812527618, 'sales_staff01', 'SALES_STAFF',
+                     2206070000000000001, 'SALES_DEPT_01'
+    UNION ALL SELECT 2107447685940813826, 'sales_staff02', 'SALES_STAFF',
+                     2206070000000000001, 'SALES_DEPT_01'
+    UNION ALL SELECT 2107682836507561985, 'sales_manager02', 'SALES_MANAGER',
+                     2206070000000000002, 'SALES_DEPT_02'
+    UNION ALL SELECT 2107683040359124993, 'sales_staff03', 'SALES_STAFF',
+                     2206070000000000002, 'SALES_DEPT_02'
+) AS expected
+LEFT JOIN sys_user AS u
+       ON u.id = expected.user_id
+      AND u.username = expected.username
+      AND u.status = 1
+      AND u.deleted = 0
+LEFT JOIN sys_department AS d
+       ON d.id = u.dept_id
+      AND d.id = expected.dept_id
+      AND d.dept_code = expected.dept_code
+      AND d.status = 1
+      AND d.deleted = 0
+LEFT JOIN sys_role AS r
+       ON r.role_code = expected.role_code
+      AND r.status = 1
+      AND r.deleted = 0
+LEFT JOIN sys_user_role AS ur
+       ON ur.user_id = u.id
+      AND ur.role_id = r.id
+ORDER BY expected.user_id;
 
--- 已执行，返回了三个用户，符合预期。
-
--- Expected identities:
--- 2107447193143648258 = sales_manager01
--- 2107447512812527618 = sales_staff01
--- 2107447685940813826 = sales_staff02
--- Expected for every row: status = 1 and deleted = 0.
--- If fewer than three rows are returned, an ID maps to another username, or a user is disabled/deleted: STOP.
+-- Expected: SALES_MANAGER=DEPT and SALES_STAFF=SELF. Otherwise STOP.
+SELECT role_code, data_scope, status, deleted
+FROM sys_role
+WHERE role_code IN ('SALES_MANAGER', 'SALES_STAFF')
+ORDER BY role_code;
 
 -- Check for collisions before first import. Expected: 0 rows.
+-- If the old fixture is already present, do not re-import; use the dedicated department update script.
 -- SELECT id, customer_no, customer_name
 -- FROM customer
 -- WHERE id BETWEEN 2206100000000000001 AND 2206100000000000024
@@ -58,8 +90,6 @@ SET NAMES utf8mb4;
 -- SELECT id, target_id, follow_type
 -- FROM follow_record
 -- WHERE id BETWEEN 2206102000000000001 AND 2206102000000000036;
-
--- 已查询，确认没有冲突。
 
 -- ==================================================
 -- 3. Optional Cleanup (disabled by default)
@@ -79,7 +109,7 @@ SET NAMES utf8mb4;
 START TRANSACTION;
 
 -- ==================================================
--- 4. Customer Test Data (24 rows; 6 per owner group)
+-- 4. Customer Test Data (24 rows across five owners and public pool)
 -- ==================================================
 INSERT INTO customer (
     id, customer_no, customer_name, customer_type, customer_level,
@@ -87,20 +117,22 @@ INSERT INTO customer (
     owner_id, status, remark, created_by, updated_by,
     created_at, updated_at, deleted
 ) VALUES
--- sales_manager01: C01-C06
-(2206100000000000001, 'TEST-CUST-V1-001', '星河制造测试有限公司', 'ENTERPRISE', 'A', '制造业', '线下活动', '010-55550001', 'contact01@example.com', '测试省', '星河市', '创新路1号', 2107447193143648258, 'ACTIVE', '经理名下重点制造客户；无联系人、无跟进场景', 2107447193143648258, 2107447193143648258, '2026-06-10 09:00:00.000', '2026-09-28 15:00:00.000', 0),
+-- sales_manager02: C01 (SALES_DEPT_02 baseline; no contacts or follow records)
+(2206100000000000001, 'TEST-CUST-V1-001', '星河制造测试有限公司', 'ENTERPRISE', 'A', '制造业', '线下活动', '010-55550001', 'contact01@example.com', '测试省', '星河市', '创新路1号', 2107682836507561985, 'ACTIVE', '销售二部经理 DEPT 基准；无联系人、无跟进场景', 2107682836507561985, 2107682836507561985, '2026-06-10 09:00:00.000', '2026-09-28 15:00:00.000', 0),
+-- sales_manager01: C02-C06
 (2206100000000000002, 'TEST-CUST-V1-002', '启明科技测试有限公司', 'ENTERPRISE', 'B', '信息技术', '官网咨询', '010-55550002', 'hello02@example.com', '测试省', '启明市', '云谷路8号', 2107447193143648258, 'POTENTIAL', '单一主要联系人、单次跟进', 2107447193143648258, 2107447193143648258, '2026-07-03 10:20:00.000', '2026-10-01 11:10:00.000', 0),
 (2206100000000000003, 'TEST-CUST-V1-003', '安澜医疗测试中心', 'ENTERPRISE', 'A', '医疗', '客户推荐', '010-55550003', NULL, '测试省', '安澜市', '健康大道16号', 2107447193143648258, 'ACTIVE', '两个联系人、三次跟进', 2107447193143648258, 2107447193143648258, '2026-05-18 14:00:00.000', '2026-10-03 09:30:00.000', 0),
 (2206100000000000004, 'TEST-CUST-V1-004', '筑梦建筑测试集团', 'ENTERPRISE', 'C', '建筑', '电话营销', NULL, 'service04@example.com', '测试省', '筑梦市', '建设路88号', 2107447193143648258, 'INACTIVE', '三个联系人、五次历史跟进', 2107447193143648258, 2107447193143648258, '2026-03-12 08:45:00.000', '2026-09-15 16:40:00.000', 0),
 (2206100000000000005, 'TEST-CUST-V1-005', '共创零售测试中心', 'ENTERPRISE', NULL, '零售', '线上推广', '010-55550005', NULL, NULL, NULL, NULL, 2107447193143648258, 'POTENTIAL', NULL, 2107447193143648258, 2107447193143648258, '2026-08-21 13:20:00.000', '2026-09-30 10:00:00.000', 0),
 (2206100000000000006, 'TEST-CUST-V1-006', '顾清和（测试客户）', 'INDIVIDUAL', 'D', '其他', '其他', NULL, 'gu.qinghe@example.com', NULL, NULL, NULL, 2107447193143648258, 'INACTIVE', '经理名下个人客户', 2107447193143648258, 2107447193143648258, '2026-04-02 16:00:00.000', '2026-08-11 09:00:00.000', 0),
--- sales_staff01: C07-C12
+-- sales_staff01: C07-C11
 (2206100000000000007, 'TEST-CUST-V1-007', '远帆物流测试有限公司', 'ENTERPRISE', 'A', '物流', '销售开发', '021-55551001', 'contact07@example.com', '测试省', '远帆市', '港湾路7号', 2107447512812527618, 'ACTIVE', 'staff01 SELF 权限基准客户', 2107447512812527618, 2107447512812527618, '2026-05-26 09:15:00.000', '2026-10-04 14:25:00.000', 0),
 (2206100000000000008, 'TEST-CUST-V1-008', '晨曦教育测试学院', 'ENTERPRISE', 'B', '教育', '官网咨询', '400-555-0100', 'admission08@example.com', '测试省', '晨曦市', '学府路20号', 2107447512812527618, 'POTENTIAL', '共享联系电话场景之一', 2107447512812527618, 2107447512812527618, '2026-07-11 11:00:00.000', '2026-10-05 16:30:00.000', 0),
 (2206100000000000009, 'TEST-CUST-V1-009', '蓝湾金融测试服务有限公司', 'ENTERPRISE', 'C', '金融', '线下活动', NULL, 'finance09@example.com', '测试省', '蓝湾市', NULL, 2107447512812527618, 'INACTIVE', '两个联系人但无主要联系人', 2107447512812527618, 2107447512812527618, '2026-04-19 10:00:00.000', '2026-09-10 12:10:00.000', 0),
 (2206100000000000010, 'TEST-CUST-V1-010', '林知夏（测试客户）', 'INDIVIDUAL', NULL, '其他', '客户推荐', '13800001010', NULL, '测试省', '云州市', NULL, 2107447512812527618, 'ACTIVE', NULL, 2107447512812527618, 2107447512812527618, '2026-08-09 15:10:00.000', '2026-10-02 09:15:00.000', 0),
 (2206100000000000011, 'TEST-CUST-V1-011', '云阶信息测试工作室', 'ENTERPRISE', 'D', '信息技术', '电话营销', '020-55551011', NULL, NULL, NULL, NULL, 2107447512812527618, 'POTENTIAL', '包含逻辑删除联系人样本', 2107447512812527618, 2107447512812527618, '2026-09-01 08:30:00.000', '2026-09-29 17:20:00.000', 0),
-(2206100000000000012, 'TEST-CUST-V1-012', '禾光农业测试合作社', 'ENTERPRISE', 'C', '其他', '其他', NULL, NULL, '测试省', '禾光县', '丰收路6号', 2107447512812527618, 'INACTIVE', '无联系人、无跟进', 2107447512812527618, 2107447512812527618, '2026-02-16 09:00:00.000', '2026-07-20 11:00:00.000', 0),
+-- sales_staff03: C12 (SALES_DEPT_02 SELF baseline; no contacts or follow records)
+(2206100000000000012, 'TEST-CUST-V1-012', '禾光农业测试合作社', 'ENTERPRISE', 'C', '其他', '其他', NULL, NULL, '测试省', '禾光县', '丰收路6号', 2107683040359124993, 'INACTIVE', '销售二部销售 SELF 基准；无联系人、无跟进', 2107683040359124993, 2107683040359124993, '2026-02-16 09:00:00.000', '2026-07-20 11:00:00.000', 0),
 -- sales_staff02: C13-C18
 (2206100000000000013, 'TEST-CUST-V1-013', '凌云软件测试有限公司', 'ENTERPRISE', 'A', '信息技术', '线上推广', '0755-55552013', 'contact13@example.com', '测试省', '凌云市', '软件园3号', 2107447685940813826, 'ACTIVE', 'staff02 SELF 权限基准客户', 2107447685940813826, 2107447685940813826, '2026-05-08 10:35:00.000', '2026-10-05 18:00:00.000', 0),
 (2206100000000000014, 'TEST-CUST-V1-014', '新叶医疗测试有限公司', 'ENTERPRISE', 'B', '医疗', '客户推荐', '400-555-0100', 'service14@example.com', '测试省', '新叶市', '生命路12号', 2107447685940813826, 'POTENTIAL', '共享联系电话场景之二', 2107447685940813826, 2107447685940813826, '2026-07-19 13:00:00.000', '2026-10-04 10:00:00.000', 0),
@@ -213,37 +245,79 @@ FROM customer
 WHERE id BETWEEN 2206100000000000001 AND 2206100000000000024
   AND customer_no LIKE 'TEST-CUST-V1-%';
 
--- 7.2 Customer count by owner. Expected: three named owners with 6 each, PUBLIC_POOL with 6.
+-- 7.2 Customer count by department. Expected: both sales departments have assigned customers.
 SELECT
-    COALESCE(CAST(owner_id AS CHAR), 'PUBLIC_POOL') AS owner_id,
-    COUNT(*) AS customer_count
-FROM customer
-WHERE id BETWEEN 2206100000000000001 AND 2206100000000000024
-GROUP BY owner_id
-ORDER BY owner_id;
+    d.dept_code,
+    d.dept_name,
+    COUNT(c.id) AS customer_count
+FROM sys_department AS d
+LEFT JOIN sys_user AS u ON u.dept_id = d.id AND u.deleted = 0
+LEFT JOIN customer AS c
+       ON c.owner_id = u.id
+      AND c.id BETWEEN 2206100000000000001 AND 2206100000000000024
+      AND c.deleted = 0
+WHERE d.dept_code IN ('SALES_DEPT_01', 'SALES_DEPT_02')
+  AND d.deleted = 0
+GROUP BY d.id, d.dept_code, d.dept_name, d.sort
+ORDER BY d.sort, d.id;
 
--- 7.3 Public-pool count. Expected: 6 before claim tests.
+-- 7.3 Customer count by owner username.
+-- Expected: manager01=5, staff01=5, staff02=6, manager02=1, staff03=1, PUBLIC_POOL=6.
+SELECT
+    CASE
+        WHEN c.owner_id IS NULL THEN 'PUBLIC_POOL'
+        ELSE COALESCE(u.username, 'UNKNOWN_OWNER')
+    END AS owner_username,
+    COUNT(*) AS customer_count
+FROM customer AS c
+LEFT JOIN sys_user AS u ON u.id = c.owner_id
+WHERE c.id BETWEEN 2206100000000000001 AND 2206100000000000024
+GROUP BY c.owner_id, u.username
+ORDER BY owner_username;
+
+-- 7.4 Public-pool count. Expected: 6 before claim tests.
 SELECT COUNT(*) AS public_pool_count
 FROM customer
 WHERE id BETWEEN 2206100000000000001 AND 2206100000000000024
   AND owner_id IS NULL
   AND deleted = 0;
 
--- 7.4 Status coverage.
+-- 7.5 Department coverage. Expected: 2; no assigned fixture owner may have NULL dept_id.
+SELECT COUNT(*) AS sales_departments_with_customer_count
+FROM (
+    SELECT u.dept_id
+    FROM customer AS c
+    JOIN sys_user AS u ON u.id = c.owner_id
+    JOIN sys_department AS d ON d.id = u.dept_id
+    WHERE c.id BETWEEN 2206100000000000001 AND 2206100000000000024
+      AND c.owner_id IS NOT NULL
+      AND c.deleted = 0
+      AND d.dept_code IN ('SALES_DEPT_01', 'SALES_DEPT_02')
+    GROUP BY u.dept_id
+) AS covered_departments;
+
+SELECT c.id, c.customer_no, c.owner_id, u.username
+FROM customer AS c
+JOIN sys_user AS u ON u.id = c.owner_id
+WHERE c.id BETWEEN 2206100000000000001 AND 2206100000000000024
+  AND c.owner_id IS NOT NULL
+  AND u.dept_id IS NULL;
+
+-- 7.6 Status coverage.
 SELECT status, COUNT(*) AS customer_count
 FROM customer
 WHERE id BETWEEN 2206100000000000001 AND 2206100000000000024
 GROUP BY status
 ORDER BY status;
 
--- 7.5 Level coverage; NULL is intentionally retained.
+-- 7.7 Level coverage; NULL is intentionally retained.
 SELECT customer_level, COUNT(*) AS customer_count
 FROM customer
 WHERE id BETWEEN 2206100000000000001 AND 2206100000000000024
 GROUP BY customer_level
 ORDER BY customer_level;
 
--- 7.6 Contact totals. Expected: 27 total, 26 active, 1 deleted.
+-- 7.8 Contact totals. Expected: 27 total, 26 active, 1 deleted.
 SELECT
     COUNT(*) AS total_contacts,
     SUM(deleted = 0) AS active_contacts,
@@ -251,19 +325,19 @@ SELECT
 FROM contact
 WHERE id BETWEEN 2206101000000000001 AND 2206101000000000027;
 
--- 7.7 Primary-contact invariant. Expected: 0 rows.
+-- 7.9 Primary-contact invariant. Expected: 0 rows.
 SELECT customer_id, SUM(is_primary = 1 AND deleted = 0) AS primary_count
 FROM contact
 WHERE id BETWEEN 2206101000000000001 AND 2206101000000000027
 GROUP BY customer_id
 HAVING SUM(is_primary = 1 AND deleted = 0) > 1;
 
--- 7.8 FollowRecord total. Expected: 36.
+-- 7.10 FollowRecord total. Expected: 36.
 SELECT COUNT(*) AS follow_record_count
 FROM follow_record
 WHERE id BETWEEN 2206102000000000001 AND 2206102000000000036;
 
--- 7.9 Follow contact/customer consistency. Expected: 0 rows.
+-- 7.11 Follow contact/customer consistency. Expected: 0 rows.
 SELECT
     fr.id AS follow_record_id,
     fr.target_id AS target_customer_id,
@@ -275,7 +349,7 @@ WHERE fr.id BETWEEN 2206102000000000001 AND 2206102000000000036
   AND fr.contact_id IS NOT NULL
   AND c.customer_id <> fr.target_id;
 
--- 7.10 FollowRecord count by actual executor.
+-- 7.12 FollowRecord count by actual executor.
 SELECT owner_id, COUNT(*) AS follow_record_count
 FROM follow_record
 WHERE id BETWEEN 2206102000000000001 AND 2206102000000000036
@@ -302,4 +376,3 @@ SELECT
     SUM(next_follow_at IS NOT NULL) AS with_next_follow
 FROM follow_record
 WHERE id BETWEEN 2206102000000000001 AND 2206102000000000036;
-

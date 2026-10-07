@@ -2,27 +2,41 @@
 
 ## 1. Purpose
 
-本文档说明 `database/test-data/customer_v1_test_data.sql` 中的固定开发测试数据。数据只用于 Customer Management V1 的前后端开发、Postman 验证和后续自动化测试，不包含真实个人或企业信息，也不代表正式客户编号生成算法。
+本文档说明 `backend/src/main/resources/db/customer_v1_test_data.sql` 中的固定开发测试数据。数据只用于 Customer Management V1 的前后端开发、Postman 验证和后续自动化测试，不包含真实个人或企业信息，也不代表正式客户编号生成算法。
 
-SQL 当前仅生成，未自动导入数据库。
+SQL 曾以旧版 owner 分布导入开发库；本次更新后的新版 SQL 未自动执行。
 
 ## 2. Required Existing Users
 
-导入前必须确认下列三个用户真实存在、ID 与 username 一致、`status=1` 且 `deleted=0`：
+导入前必须确认下列五个用户真实存在、ID 与 username 一致、角色正确、`status=1` 且 `deleted=0`：
 
 | Role | Username | User ID |
 |---|---|---:|
 | SALES_MANAGER | sales_manager01 | 2107447193143648258 |
 | SALES_STAFF | sales_staff01 | 2107447512812527618 |
 | SALES_STAFF | sales_staff02 | 2107447685940813826 |
+| SALES_MANAGER | sales_manager02 | 2107682836507561985 |
+| SALES_STAFF | sales_staff03 | 2107683040359124993 |
 
 如果任何用户缺失、ID 不匹配、已停用或已删除，**STOP**，不要继续导入。脚本不会创建用户、角色或用户角色关系。
+
+### Required Department Membership
+
+| Department | Department ID | Username | User ID |
+|---|---:|---|---:|
+| 销售一部 (`SALES_DEPT_01`) | 2206070000000000001 | sales_manager01 | 2107447193143648258 |
+| 销售一部 (`SALES_DEPT_01`) | 2206070000000000001 | sales_staff01 | 2107447512812527618 |
+| 销售一部 (`SALES_DEPT_01`) | 2206070000000000001 | sales_staff02 | 2107447685940813826 |
+| 销售二部 (`SALES_DEPT_02`) | 2206070000000000002 | sales_manager02 | 2107682836507561985 |
+| 销售二部 (`SALES_DEPT_02`) | 2206070000000000002 | sales_staff03 | 2107683040359124993 |
+
+导入前还必须确认 `SALES_MANAGER.data_scope=DEPT` 且 `SALES_STAFF.data_scope=SELF`。任何部门归属或 data scope 不匹配时，**STOP**，不要导入 Customer fixture。
 
 ## 3. Dataset Summary
 
 | Entity | ID range | Count | Notes |
 |---|---|---:|---|
-| Customer | 2206100000000000001–2206100000000000024 | 24 | manager、staff01、staff02、公海各 6 |
+| Customer | 2206100000000000001–2206100000000000024 | 24 | manager01 5、staff01 5、staff02 6、manager02 1、staff03 1、公海 6 |
 | Contact | 2206101000000000001–2206101000000000027 | 27 | 26 active + 1 deleted filter sample |
 | FollowRecord | 2206102000000000001–2206102000000000036 | 36 | 全部为 CUSTOMER target、deleted=0 |
 
@@ -32,7 +46,7 @@ SQL 当前仅生成，未自动导入数据库。
 
 | Key | Customer ID | customer_no | Customer | Owner | Purpose |
 |---|---:|---|---|---|---|
-| C01 | 2206100000000000001 | TEST-CUST-V1-001 | 星河制造测试有限公司 | manager01 | 无联系人、无跟进 |
+| C01 | 2206100000000000001 | TEST-CUST-V1-001 | 星河制造测试有限公司 | manager02 | 销售二部 manager DEPT 基准；无联系人、无跟进 |
 | C02 | 2206100000000000002 | TEST-CUST-V1-002 | 启明科技测试有限公司 | manager01 | 1 联系人且 primary、1 跟进 |
 | C03 | 2206100000000000003 | TEST-CUST-V1-003 | 安澜医疗测试中心 | manager01 | 2 联系人、1 primary、3 跟进 |
 | C04 | 2206100000000000004 | TEST-CUST-V1-004 | 筑梦建筑测试集团 | manager01 | 3 联系人、1 primary、5 次有序跟进 |
@@ -43,7 +57,7 @@ SQL 当前仅生成，未自动导入数据库。
 | C09 | 2206100000000000009 | TEST-CUST-V1-009 | 蓝湾金融测试服务有限公司 | staff01 | 2 联系人但无 primary |
 | C10 | 2206100000000000010 | TEST-CUST-V1-010 | 林知夏（测试客户） | staff01 | Individual、3 次跟进 |
 | C11 | 2206100000000000011 | TEST-CUST-V1-011 | 云阶信息测试工作室 | staff01 | 1 个 deleted Contact 样本 |
-| C12 | 2206100000000000012 | TEST-CUST-V1-012 | 禾光农业测试合作社 | staff01 | 无联系人、无跟进 |
+| C12 | 2206100000000000012 | TEST-CUST-V1-012 | 禾光农业测试合作社 | staff03 | 销售二部 staff SELF 基准；无联系人、无跟进 |
 | C13 | 2206100000000000013 | TEST-CUST-V1-013 | 凌云软件测试有限公司 | staff02 | SELF 允许访问基准 |
 | C14 | 2206100000000000014 | TEST-CUST-V1-014 | 新叶医疗测试有限公司 | staff02 | 与 C08 共享电话，跨用户边界 |
 | C15 | 2206100000000000015 | TEST-CUST-V1-015 | 峰谷制造测试厂 | staff02 | 3 联系人、4 次跟进 |
@@ -65,21 +79,25 @@ SQL 当前仅生成，未自动导入数据库。
 
 | ID | Actor | Target | Expected | Purpose |
 |---|---|---|---|---|
-| AUTH-01 | sales_staff01 | C07/C08 等 staff01 Customer | Allowed | SELF 正向 |
-| AUTH-02 | sales_staff01 | C13/C14 等 staff02 Customer | Forbidden | 跨销售访问 |
-| AUTH-03 | sales_staff02 | C07/C08 等 staff01 Customer | Forbidden | 反向跨销售访问 |
-| AUTH-04 | sales_manager01 | C07 与 C13 | Allowed | Manager ALL |
-| AUTH-05 | sales_staff01 | C14 的 Contact 2206101000000000017 | Forbidden | 不能通过 Contact ID 绕过 Customer SELF |
-| AUTH-06 | sales_staff01 | C14 的 FollowRecord 2206102000000000025 | Forbidden | 不能通过 FollowRecord ID 绕过 Customer SELF |
-| AUTH-07 | sales_staff01 | 公海列表 | Allowed with planned `customer_pool:list` | 公海独立权限 |
-| AUTH-08 | sales_staff01 | POOL-STAFF01 | Allowed with planned `customer_pool:claim` | staff 领取 |
-| AUTH-09 | sales_manager01 | POOL-CONCURRENCY 或其他公海客户 | Allowed with planned permission | manager 领取 |
+| AUTH-DEPT-01 | sales_manager01 | C07 / C13 等销售一部 Customer | Allowed | DEPT 同部门正向 |
+| AUTH-DEPT-02 | sales_manager01 | C01 / C12 销售二部 Customer | Forbidden | DEPT 跨部门隔离 |
+| AUTH-DEPT-03 | sales_manager02 | C01 / C12 | Allowed | 销售二部 DEPT 正向 |
+| AUTH-DEPT-04 | sales_manager02 | C02 / C07 / C13 等销售一部 Customer | Forbidden | DEPT 跨部门隔离 |
+| AUTH-SELF-01 | sales_staff01 | C07/C08 等 staff01 Customer | Allowed | SELF 正向 |
+| AUTH-SELF-02 | sales_staff01 | C13/C14 等 staff02 Customer | Forbidden | 同部门不同 owner 仍不可访问 |
+| AUTH-SELF-03 | sales_staff01 | C01 / C12 销售二部 Customer | Forbidden | SELF 跨部门隔离 |
+| AUTH-OBJECT-01 | sales_staff01 | C14 的 Contact 2206101000000000017 | Forbidden | 不能通过 Contact ID 绕过 Customer SELF |
+| AUTH-OBJECT-02 | sales_staff01 | C14 的 FollowRecord 2206102000000000025 | Forbidden | 不能通过 FollowRecord ID 绕过 Customer SELF |
+| AUTH-POOL-01 | sales_staff01 | 公海列表 | Allowed with planned `customer_pool:list` | 公海独立权限，不属于 DEPT |
+| AUTH-POOL-02 | sales_staff01 | POOL-STAFF01 | Allowed with planned `customer_pool:claim` | staff 领取 |
+| AUTH-POOL-03 | sales_manager01 | POOL-CONCURRENCY 或其他公海客户 | Allowed with planned permission | manager 领取 |
 
 SUPER_ADMIN 和 SYSTEM_ADMIN 的真实 ID 未在任务中提供，因此测试数据没有虚构其审计 ID。其查看/禁止领取规则应在业务自动化测试中通过认证 principal 模拟。
 
 ## 6. Coverage
 
-- Status：POTENTIAL、ACTIVE、INACTIVE 在四个 owner 组中均有覆盖。
+- Owner/data scope：销售一部 manager/staff、销售二部 manager/staff 和 Public Pool 均有 Customer，可覆盖 ALL / DEPT / SELF / Public Pool。
+- Status：POTENTIAL、ACTIVE、INACTIVE 均有覆盖。
 - Level：A、B、C、D、NULL 均有覆盖。
 - Type：ENTERPRISE 为主，INDIVIDUAL 共 4 条。
 - Industry：制造业、信息技术、金融、教育、医疗、零售、建筑、物流、其他。
@@ -105,7 +123,7 @@ C22 和 C24 当前 `owner_id=NULL`，但保留少量历史 FollowRecord。其语
 ### Import
 
 1. 先将上一任务提供的 schema migration 应用到当前开发数据库，确保 Customer owner 可空且 FollowRecord 已有 contact_id。
-2. 打开 SQL，单独执行 Pre-check，核对三个用户。
+2. 打开 SQL，单独执行 Pre-check，核对五个用户、部门归属和 SALES_MANAGER / SALES_STAFF data scope。
 3. 执行 collision 查询，首次导入应返回 0 行。
 4. 确认无冲突后执行 Customer、Contact、FollowRecord 插入事务。
 5. 执行文件末尾 Verification Queries。
@@ -113,7 +131,7 @@ C22 和 C24 当前 `owner_id=NULL`，但保留少量历史 FollowRecord。其语
 命令行示例：
 
 ```powershell
-cmd /c "mysql -h localhost -P 3306 -u root -p crm_system < database\test-data\customer_v1_test_data.sql"
+cmd /c "mysql -h localhost -P 3306 -u root -p crm_system < backend\src\main\resources\db\customer_v1_test_data.sql"
 ```
 
 由于命令行整文件执行不能代替人工核对，推荐先在 MySQL 客户端中分段执行 Pre-check。不要把密码写入命令或脚本。
@@ -135,3 +153,4 @@ Cleanup 只匹配本数据集固定 ID 范围，Customer 还要求 `TEST-CUST-V1
 - 脚本不是数据库迁移工具，不保证在已存在同 ID/编号数据时自动覆盖。
 - 公海领取会改变固定测试数据，执行领取类测试前后需要管理测试夹具状态。
 - 数据仅面向 Customer、Contact、FollowRecord；不生成 Clue、Business、Contract。
+- 开发库若已导入旧版 fixture，可人工执行 `customer_v1_test_data_department_update.sql` 仅同步 C01/C12，或精确清理后重新导入新版 fixture；两种方式均不会自动执行。
