@@ -298,11 +298,148 @@ WHERE NOT EXISTS (
     SELECT 1 FROM sys_department WHERE dept_code = 'SALES_DEPT_02'
 );
 
--- 新建库执行到此处时可能尚无 SALES_MANAGER；重复执行 init.sql 时会将已有角色收敛为 DEPT。
-UPDATE sys_role
-   SET data_scope = 'DEPT',
-       updated_at = CURRENT_TIMESTAMP(3)
- WHERE role_code = 'SALES_MANAGER'
-   AND data_scope <> 'DEPT';
+-- Fixed IDs make a fresh database self-contained. Existing environments keep
+-- their current role rows because role_code is the stable lookup key.
+INSERT INTO sys_role (
+    id, role_code, role_name, data_scope, status, remark,
+    created_by, updated_by, created_at, updated_at, deleted, version
+)
+SELECT role_fixture.id, role_fixture.role_code, role_fixture.role_name,
+       role_fixture.data_scope, 1, '系统内置角色', NULL, NULL,
+       CURRENT_TIMESTAMP(3), CURRENT_TIMESTAMP(3), 0, 0
+FROM (
+    SELECT 2206070900000000001 AS id, 'SUPER_ADMIN' AS role_code,
+           '超级管理员' AS role_name, 'ALL' AS data_scope
+    UNION ALL SELECT 2206070900000000002, 'SYSTEM_ADMIN', '系统管理员', 'ALL'
+    UNION ALL SELECT 2206070900000000003, 'SALES_MANAGER', '销售经理', 'DEPT'
+    UNION ALL SELECT 2206070900000000004, 'SALES_STAFF', '销售人员', 'SELF'
+) AS role_fixture
+WHERE NOT EXISTS (
+    SELECT 1
+    FROM sys_role AS existing_role
+    WHERE existing_role.role_code = role_fixture.role_code
+);
+
+-- Customer Management V1 permission tree. MENU nodes organize the tree;
+-- BUTTON nodes are the stable functional authorities used by method security.
+INSERT INTO sys_permission (
+    id, parent_id, permission_code, permission_name, permission_type,
+    route_path, component_path, http_method, api_path,
+    sort_order, status, created_at, updated_at
+)
+SELECT 2206071000000000001, 0, 'customer-management', '客户管理', 'MENU',
+       NULL, NULL, NULL, NULL, 50, 1, CURRENT_TIMESTAMP(3), CURRENT_TIMESTAMP(3)
+WHERE NOT EXISTS (
+    SELECT 1 FROM sys_permission WHERE permission_code = 'customer-management'
+);
+
+INSERT INTO sys_permission (
+    id, parent_id, permission_code, permission_name, permission_type,
+    route_path, component_path, http_method, api_path,
+    sort_order, status, created_at, updated_at
+)
+SELECT menu_fixture.id, root.id, menu_fixture.permission_code,
+       menu_fixture.permission_name, 'MENU', menu_fixture.route_path,
+       NULL, NULL, NULL, menu_fixture.sort_order, 1,
+       CURRENT_TIMESTAMP(3), CURRENT_TIMESTAMP(3)
+FROM sys_permission AS root
+CROSS JOIN (
+    SELECT 2206071000000000002 AS id, 'customer-management:customer-list' AS permission_code,
+           '客户列表' AS permission_name, '/admin/business/customer-list' AS route_path, 10 AS sort_order
+    UNION ALL SELECT 2206071000000000003, 'customer-management:public-pool',
+                     '公海客户', '/admin/business/public-customer', 20
+    UNION ALL SELECT 2206071000000000004, 'customer-management:contact',
+                     '联系人管理', '/admin/business/contact', 30
+    UNION ALL SELECT 2206071000000000005, 'customer-management:follow',
+                     '跟进记录', '/admin/business/follow-up', 40
+) AS menu_fixture
+WHERE root.permission_code = 'customer-management'
+  AND root.permission_type = 'MENU'
+  AND NOT EXISTS (
+      SELECT 1
+      FROM sys_permission AS existing_permission
+      WHERE existing_permission.permission_code = menu_fixture.permission_code
+  );
+
+INSERT INTO sys_permission (
+    id, parent_id, permission_code, permission_name, permission_type,
+    route_path, component_path, http_method, api_path,
+    sort_order, status, created_at, updated_at
+)
+SELECT operation_fixture.id, parent_menu.id, operation_fixture.permission_code,
+       operation_fixture.permission_name, 'BUTTON', NULL, NULL, NULL, NULL,
+       operation_fixture.sort_order, 1, CURRENT_TIMESTAMP(3), CURRENT_TIMESTAMP(3)
+FROM (
+    SELECT 2206071000000000011 AS id, 'customer-management:customer-list' AS parent_code,
+           'customer:list' AS permission_code, '查看客户' AS permission_name, 10 AS sort_order
+    UNION ALL SELECT 2206071000000000012, 'customer-management:customer-list',
+                     'customer:create', '新建客户', 20
+    UNION ALL SELECT 2206071000000000013, 'customer-management:customer-list',
+                     'customer:update', '编辑客户', 30
+    UNION ALL SELECT 2206071000000000014, 'customer-management:public-pool',
+                     'customer_pool:list', '查看公海客户', 10
+    UNION ALL SELECT 2206071000000000015, 'customer-management:public-pool',
+                     'customer_pool:claim', '领取公海客户', 20
+    UNION ALL SELECT 2206071000000000016, 'customer-management:contact',
+                     'contact:list', '查看联系人', 10
+    UNION ALL SELECT 2206071000000000017, 'customer-management:contact',
+                     'contact:create', '新建联系人', 20
+    UNION ALL SELECT 2206071000000000018, 'customer-management:contact',
+                     'contact:update', '编辑联系人', 30
+    UNION ALL SELECT 2206071000000000019, 'customer-management:contact',
+                     'contact:delete', '删除联系人', 40
+    UNION ALL SELECT 2206071000000000020, 'customer-management:follow',
+                     'follow:list', '查看跟进记录', 10
+    UNION ALL SELECT 2206071000000000021, 'customer-management:follow',
+                     'follow:create', '新建跟进记录', 20
+) AS operation_fixture
+JOIN sys_permission AS parent_menu
+  ON parent_menu.permission_code = operation_fixture.parent_code
+ AND parent_menu.permission_type = 'MENU'
+WHERE NOT EXISTS (
+    SELECT 1
+    FROM sys_permission AS existing_permission
+    WHERE existing_permission.permission_code = operation_fixture.permission_code
+);
+
+-- Resolve role IDs by their stable role_code. MENU nodes are intentionally not
+-- included in this functional permission matrix or its 9/9/11/11 counts.
+INSERT INTO sys_role_permission (id, role_id, permission_id, create_time)
+SELECT 2206071100000000000 + role_fixture.id_offset + permission_fixture.id_offset,
+       role.id, permission.id, CURRENT_TIMESTAMP(3)
+FROM (
+    SELECT 'SUPER_ADMIN' AS role_code, 0 AS id_offset
+    UNION ALL SELECT 'SYSTEM_ADMIN', 100
+    UNION ALL SELECT 'SALES_MANAGER', 200
+    UNION ALL SELECT 'SALES_STAFF', 300
+) AS role_fixture
+JOIN sys_role AS role
+  ON role.role_code = role_fixture.role_code
+ AND role.deleted = 0
+JOIN (
+    SELECT 'customer:list' AS permission_code, 1 AS id_offset
+    UNION ALL SELECT 'customer:create', 2
+    UNION ALL SELECT 'customer:update', 3
+    UNION ALL SELECT 'customer_pool:list', 4
+    UNION ALL SELECT 'customer_pool:claim', 5
+    UNION ALL SELECT 'contact:list', 6
+    UNION ALL SELECT 'contact:create', 7
+    UNION ALL SELECT 'contact:update', 8
+    UNION ALL SELECT 'contact:delete', 9
+    UNION ALL SELECT 'follow:list', 10
+    UNION ALL SELECT 'follow:create', 11
+) AS permission_fixture
+JOIN sys_permission AS permission
+  ON permission.permission_code = permission_fixture.permission_code
+WHERE (
+        role_fixture.role_code IN ('SALES_MANAGER', 'SALES_STAFF')
+        OR permission_fixture.permission_code NOT IN ('customer_pool:claim', 'follow:create')
+      )
+  AND NOT EXISTS (
+      SELECT 1
+      FROM sys_role_permission AS existing_relation
+      WHERE existing_relation.role_id = role.id
+        AND existing_relation.permission_id = permission.id
+  );
 
 SET FOREIGN_KEY_CHECKS = 1;
