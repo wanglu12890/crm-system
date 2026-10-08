@@ -83,6 +83,7 @@ crm-system/
 │       └── views/               页面入口
 ├── database/init.sql            MySQL schema
 ├── docs/                        架构与长期上下文
+│   └── development/             开发规范（含 FRONTEND_CONVENTIONS.md）
 └── task/                        历史任务要求，不是运行时源代码
 ```
 
@@ -337,7 +338,27 @@ ROLE_SUPER_ADMIN AND permission:list
 - API 文件按资源组织并统一使用 `request`，不直接新建 Axios 实例。
 - TypeScript 业务模型集中在 `src/types`；认证相关类型当前位于 `src/api/auth.ts`。
 
-## 15. Backend Development Conventions
+
+## 15. Frontend Development Convention
+
+前端页面开发遵循 `docs/development/FRONTEND_CONVENTIONS.md`。
+
+**涉及前端页面新增、修改、重构时，Codex 必须先阅读该规范，并检查现有相似模块。**
+
+典型业务管理页面优先采用 View 页面容器 + Search 查询组件 + Table 表格组件 + FormDialog 表单组件的组织方式。
+
+- View 负责页面状态、API 查询、分页及组件协调。
+- Search 负责查询表单和查询事件。
+- Table 负责数据展示及操作事件。
+- FormDialog 负责表单校验、提交及成功通知。
+
+组件拆分以职责边界、维护成本和扩展需求为依据，不强制所有页面采用相同结构。
+
+优先参考现有 User、Role、Customer 模块，保持 UI 风格、权限控制和父子组件通信方式一致。
+
+现有 User/Role 模块可能使用 Page/Table/Dialog 命名，Customer 模块使用 View/Search/Table/FormDialog 命名；新增页面优先参考同类模块的现有命名，不强制重命名既有组件。
+
+## 16. Backend Development Conventions
 
 - Controller 保持薄层，响应风格与同模块现有接口一致；当前没有统一成功响应包装。
 - Service 写操作应使用事务，先完成权限与合法性校验，再执行任何写入；当前多数写流程已遵循，已知例外见下文。
@@ -349,7 +370,7 @@ ROLE_SUPER_ADMIN AND permission:list
 - 禁止记录明文密码、密码摘要、JWT、密钥或完整认证请求体。
 - 不为局部功能另建重复的 Result、认证上下文或 JWT 工具体系。
 
-## 16. Database Conventions
+## 17. Database Conventions
 
 ### Core RBAC Tables
 
@@ -392,7 +413,7 @@ ROLE_SUPER_ADMIN AND permission:list
 - `follow_record.contact_id` 可为空，并通过 FK 关联 `contact.id`；它表示本次跟进可选涉及的具体联系人。
 - `follow_record` 原有 `target_type + target_id` 多态目标结构保持不变。
 
-## 17. Exception and Security Conventions
+## 18. Exception and Security Conventions
 
 - 401：未认证、无效/过期 JWT、登录凭证错误或账号不可用。
 - 403：Spring Security 方法权限拒绝，或 Service 对象级授权异常。
@@ -403,7 +424,7 @@ ROLE_SUPER_ADMIN AND permission:list
 - 模块业务异常也返回 ProblemDetail，但 title/code 由各模块 handler 决定，尚未完全标准化。
 - 不向前端返回 password、passwordHash、deleted、原始 GrantedAuthority 或内部密钥。
 
-## 18. Testing Strategy
+## 19. Testing Strategy
 
 ### Existing Layers
 
@@ -429,7 +450,7 @@ npm.cmd run build
 
 不要声称存在 `npm test` 或 lint 命令；当前 package.json 未定义它们。
 
-## 19. Current Module Status
+## 20. Current Module Status
 
 | Module | Feature | Status | Notes |
 |---|---|---|---|
@@ -455,9 +476,9 @@ npm.cmd run build
 - 负责人候选暂时复用受 `user:list` 保护的用户列表；SALES_STAFF 隐藏该筛选，其他缺少 `user:list` 的角色也不发起无权请求。
 - 除已完成的 Customer List 前后端查询及其数据范围外，其余 Customer 写操作、详情、公海、Contact 与 FollowRecord 能力仍是后续实现基线。
 
-## 20. Known Issues and Deferred Work
+## 21. Known Issues and Deferred Work
 
-### 20.1 Known Technical / Security Issues
+### 21.1 Known Technical / Security Issues
 
 - reset password 后 JWT 不立即失效
 - /auth/me ID 类型不一致
@@ -465,7 +486,7 @@ npm.cmd run build
 - DataInitializer bootstrap credential
 - RoleServiceImpl.createRole transaction inconsistency
 
-### 20.2 Deferred Features / Engineering Work
+### 21.2 Deferred Features / Engineering Work
 
 - user delete
 - role delete
@@ -476,7 +497,7 @@ npm.cmd run build
 - frontend automated tests
 - customer/sales permission integration
 
-## 21. Development Guardrails for Codex
+## 22. Development Guardrails for Codex
 
 1. 每个任务先读本文档，再读任务相关真实代码、测试和 SQL。
 2. Context 不能替代代码；冲突时以当前代码和测试为准，并在必要时更新 Context。
@@ -494,7 +515,7 @@ npm.cmd run build
 14. 不自动执行会改写真实数据库的 SQL；提供明确、尽量幂等的手工执行说明。
 15. 不自动 commit 或 push。
 
-## 22. Context Maintenance Rules
+## 23. Context Maintenance Rules
 
 只有任务改变以下长期事实时才更新本文档：
 
