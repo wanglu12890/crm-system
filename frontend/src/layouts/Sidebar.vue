@@ -32,6 +32,8 @@ const visibleSystemMenuItems = computed(() =>
       && (!menuItem.permission || authStore.hasPermission(menuItem.permission))
   )
 )
+
+const canViewCustomerList = computed(() => authStore.hasPermission('customer:list'))
 </script>
 
 <template>
@@ -48,7 +50,9 @@ const visibleSystemMenuItems = computed(() =>
 
       <el-sub-menu index="customer-management">
         <template #title>客户管理</template>
-        <el-menu-item index="/admin/business/customer-list">客户列表</el-menu-item>
+        <el-menu-item v-if="canViewCustomerList" index="/admin/business/customer-list">
+          客户列表
+        </el-menu-item>
         <el-menu-item index="/admin/business/public-customer">公海客户</el-menu-item>
         <el-menu-item index="/admin/business/contact">联系人管理</el-menu-item>
         <el-menu-item index="/admin/business/follow-up">跟进记录</el-menu-item>

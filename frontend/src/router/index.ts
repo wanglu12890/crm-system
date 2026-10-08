@@ -66,12 +66,17 @@ const routes: RouteRecordRaw[] = [
           permission: 'permission:list'
         }
       },
+      {
+        path: 'business/customer-list',
+        name: 'CustomerList',
+        component: () => import('@/views/business/Customer.vue'),
+        meta: { title: '客户列表', permission: 'customer:list' }
+      },
       // ……使用 map 方法动态生成路由记录，减少重复代码，提高可维护性
       // map 方法遍历一个包含路径、名称和标题的数组，生成对应的路由记录对象。
       // map 方法返回一个新的数组，包含每个子路由的路径、名称、组件和元信息。
       // 组件使用占位组件 Placeholder.vue，实际开发中可以替换为具体的页面组件。
       ...[
-        ['business/customer-list', 'CustomerList', '客户列表'],
         ['business/public-customer', 'PublicCustomer', '公海客户'],
         ['business/contact', 'Contact', '联系人管理'],
         ['business/follow-up', 'FollowUp', '跟进记录'],

@@ -324,7 +324,7 @@ ROLE_SUPER_ADMIN AND permission:list
 - 用户、角色、权限路由分别检查 `user:list`、`role:list`、`SUPER_ADMIN + permission:list`。
 - 无 token 跳转登录；身份加载失败清 token；权限不足跳转 `/403`。
 - Sidebar 对系统管理菜单进行相同的角色/权限过滤。
-- 客户、销售、分析菜单当前未做权限过滤，且目标页面仍为 Placeholder。
+- 客户列表路由和菜单受 `customer:list` 控制并使用真实列表页面；其余客户、销售、分析入口仍为 Placeholder，尚未完成权限过滤。
 - User/Role 页面进行按钮级和部分目标对象级可见性控制；后台 Service 仍重复强制执行边界。
 
 ### Component Responsibility
@@ -437,7 +437,7 @@ npm.cmd run build
 | User Management | list/create/edit/role binding/reset password | Implemented | 前端本地搜索分页；无删除接口 |
 | Role Management | list/create/edit/permission read-save | Implemented | 创建/编辑/权限配置受 SUPER_ADMIN 边界保护；无删除接口 |
 | Permission Management | tree/list/overview | Implemented | 只读管理视图，无权限 CRUD |
-| Customer/Contact/Follow-up | customer list backend + rules/schema | Partially implemented | `GET /api/customers` 已实现分页、筛选与 ALL/DEPT/SELF 范围；无客户详情/写接口、联系人/跟进业务层和真实前端页面 |
+| Customer/Contact/Follow-up | customer list frontend/backend + rules/schema | Partially implemented | 客户列表已实现服务端分页、筛选及权限展示；无客户详情/写接口、联系人/跟进业务层和对应真实页面 |
 | Clue/Opportunity/Contract | schema + menu placeholder | Not implemented | 无后端业务层和真实前端页面 |
 | Analytics/AI | menu placeholder | Not implemented | 无真实数据或 API |
 
@@ -451,7 +451,9 @@ npm.cmd run build
 - FollowRecord 可选关联 Contact；`owner_id` 表示实际跟进执行人，`created_by` 表示记录创建人。
 - Customer V1 不提供客户删除；Contact 删除采用逻辑删除；FollowRecord V1 只提供列表和新增。
 - 公海领取必须通过带 `owner_id IS NULL AND deleted=0` 条件的原子更新防止并发重复领取。
-- 除已完成的 Customer List 查询及其数据范围外，其余 Customer 写操作、详情、公海、Contact 与 FollowRecord 能力仍是后续实现基线。
+- Customer List 前端直接使用后端 `records/total/page/size/pages` 服务端分页，不对当前页数据再次执行前端业务筛选或数据范围过滤。
+- 负责人候选暂时复用受 `user:list` 保护的用户列表；SALES_STAFF 隐藏该筛选，其他缺少 `user:list` 的角色也不发起无权请求。
+- 除已完成的 Customer List 前后端查询及其数据范围外，其余 Customer 写操作、详情、公海、Contact 与 FollowRecord 能力仍是后续实现基线。
 
 ## 20. Known Issues and Deferred Work
 
