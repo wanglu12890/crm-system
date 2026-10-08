@@ -7,6 +7,7 @@ import com.company.crm.security.SecurityUser;
 import com.company.crm.security.datascope.DataScopeContext;
 import com.company.crm.security.datascope.DataScopeResolver;
 import com.company.crm.security.datascope.DataScopeType;
+import com.company.crm.utils.CustomerNumberGenerator;
 import com.company.crm.vo.PageResultVO;
 import com.company.crm.vo.customer.CustomerListVO;
 import org.junit.jupiter.api.AfterEach;
@@ -32,6 +33,7 @@ class CustomerServiceImplTest {
 
     @Mock private CustomerMapper customerMapper;
     @Mock private DataScopeResolver dataScopeResolver;
+    @Mock private CustomerNumberGenerator customerNumberGenerator;
     @InjectMocks private CustomerServiceImpl customerService;
 
     @AfterEach

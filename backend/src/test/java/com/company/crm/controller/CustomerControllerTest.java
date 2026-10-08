@@ -3,6 +3,7 @@ package com.company.crm.controller;
 import com.company.crm.config.SecurityConfig;
 import com.company.crm.exception.CustomerExceptionHandler;
 import com.company.crm.exception.DataScopeConfigurationException;
+import com.company.crm.exception.ForbiddenCustomerCreationException;
 import com.company.crm.security.CustomUserDetailsService;
 import com.company.crm.security.JwtAuthenticationFilter;
 import com.company.crm.security.JwtService;
@@ -10,6 +11,7 @@ import com.company.crm.security.RestAccessDeniedHandler;
 import com.company.crm.security.RestAuthenticationEntryPoint;
 import com.company.crm.service.CustomerService;
 import com.company.crm.vo.PageResultVO;
+import com.company.crm.vo.customer.CustomerCreateVO;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
@@ -27,6 +29,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -94,5 +97,98 @@ class CustomerControllerTest {
                         .with(user("manager").authorities(new SimpleGrantedAuthority("customer:list"))))
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.code").value("DATA_SCOPE_CONFIGURATION_ERROR"));
+    }
+
+    @Test
+    void shouldRejectAnonymousCustomerCreation() throws Exception {
+        mockMvc.perform(post("/customers")
+                        .contentType("application/json")
+                        .content("{\"customerName\":\"测试客户\"}"))
+                .andExpect(status().isUnauthorized());
+        verify(customerService, never()).createCustomer(any());
+    }
+
+    @Test
+    void shouldRejectCustomerCreationWithoutAuthority() throws Exception {
+        mockMvc.perform(post("/customers")
+                        .with(user("user"))
+                        .contentType("application/json")
+                        .content("{\"customerName\":\"测试客户\"}"))
+                .andExpect(status().isForbidden());
+        verify(customerService, never()).createCustomer(any());
+    }
+
+    @Test
+    void shouldCreateCustomerAndIgnoreClientControlledOwnerField() throws Exception {
+        when(customerService.createCustomer(any()))
+                .thenReturn(new CustomerCreateVO("2207000000000000001", "KH2207000000000000001"));
+
+        mockMvc.perform(post("/customers")
+                        .with(user("sales").authorities(new SimpleGrantedAuthority("customer:create")))
+                        .contentType("application/json")
+                        .content("""
+                                {
+                                  "customerName": "测试客户",
+                                  "ownerId": "999",
+                                  "customerType": "ENTERPRISE"
+                                }
+                                """))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.id").value("2207000000000000001"))
+                .andExpect(jsonPath("$.customerNo").value("KH2207000000000000001"));
+        verify(customerService).createCustomer(any());
+    }
+
+    @Test
+    void shouldRejectMissingCustomerName() throws Exception {
+        mockMvc.perform(post("/customers")
+                        .with(user("sales").authorities(new SimpleGrantedAuthority("customer:create")))
+                        .contentType("application/json")
+                        .content("{}"))
+                .andExpect(status().isBadRequest());
+        verify(customerService, never()).createCustomer(any());
+    }
+
+    @Test
+    void shouldRejectOverlongCustomerName() throws Exception {
+        String longName = "客".repeat(201);
+        mockMvc.perform(post("/customers")
+                        .with(user("sales").authorities(new SimpleGrantedAuthority("customer:create")))
+                        .contentType("application/json")
+                        .content("{\"customerName\":\"" + longName + "\"}"))
+                .andExpect(status().isBadRequest());
+        verify(customerService, never()).createCustomer(any());
+    }
+
+    @Test
+    void shouldRejectInvalidEnumsAndEmail() throws Exception {
+        mockMvc.perform(post("/customers")
+                        .with(user("sales").authorities(new SimpleGrantedAuthority("customer:create")))
+                        .contentType("application/json")
+                        .content("""
+                                {
+                                  "customerName": "测试客户",
+                                  "customerType": "PUBLIC",
+                                  "customerLevel": "S",
+                                  "status": "UNKNOWN",
+                                  "email": "invalid-email"
+                                }
+                                """))
+                .andExpect(status().isBadRequest());
+        verify(customerService, never()).createCustomer(any());
+    }
+
+    @Test
+    void shouldMapAmbiguousRoleCombinationToForbiddenProblem() throws Exception {
+        when(customerService.createCustomer(any())).thenThrow(
+                new ForbiddenCustomerCreationException("当前用户角色组合无法确定客户归属")
+        );
+
+        mockMvc.perform(post("/customers")
+                        .with(user("mixed").authorities(new SimpleGrantedAuthority("customer:create")))
+                        .contentType("application/json")
+                        .content("{\"customerName\":\"测试客户\"}"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("CUSTOMER_CREATION_FORBIDDEN"));
     }
 }

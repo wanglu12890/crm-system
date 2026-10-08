@@ -19,7 +19,7 @@
 - 项目名称：`crm-system`，企业内部 B 端 CRM。
 - 采用前后端分离架构：Spring Boot REST API + Vue SPA。
 - System Management V1（认证、用户、角色、权限）已完成当前计划范围。
-- Customer Management V1 已完成受 JWT 与 `customer:list` 保护的客户列表后端查询；联系人、跟进仍没有业务 Controller/Service/API 实现。
+- Customer Management V1 已完成客户列表前后端和受 `customer:create` 保护的客户创建后端；联系人、跟进仍没有业务 Controller/Service/API 实现。
 - 线索、商机、合同、数据分析和 AI 分析目前仅有数据库表或前端占位入口，没有业务 Controller/Service/API 实现。
 - 后端 context path 为 `/api`；Controller 路径不得再次包含 `/api`。
 
@@ -458,7 +458,7 @@ npm.cmd run build
 | User Management | list/create/edit/role binding/reset password | Implemented | 前端本地搜索分页；无删除接口 |
 | Role Management | list/create/edit/permission read-save | Implemented | 创建/编辑/权限配置受 SUPER_ADMIN 边界保护；无删除接口 |
 | Permission Management | tree/list/overview | Implemented | 只读管理视图，无权限 CRUD |
-| Customer/Contact/Follow-up | customer list frontend/backend + rules/schema | Partially implemented | 客户列表已实现服务端分页、筛选及权限展示；无客户详情/写接口、联系人/跟进业务层和对应真实页面 |
+| Customer/Contact/Follow-up | customer list + customer create backend + rules/schema | Partially implemented | 客户列表已完成前后端；`POST /api/customers` 已完成，尚无创建前端、详情/编辑、公海、联系人和跟进实现 |
 | Clue/Opportunity/Contract | schema + menu placeholder | Not implemented | 无后端业务层和真实前端页面 |
 | Analytics/AI | menu placeholder | Not implemented | 无真实数据或 API |
 
@@ -474,7 +474,9 @@ npm.cmd run build
 - 公海领取必须通过带 `owner_id IS NULL AND deleted=0` 条件的原子更新防止并发重复领取。
 - Customer List 前端直接使用后端 `records/total/page/size/pages` 服务端分页，不对当前页数据再次执行前端业务筛选或数据范围过滤。
 - 负责人候选暂时复用受 `user:list` 保护的用户列表；SALES_STAFF 隐藏该筛选，其他缺少 `user:list` 的角色也不发起无权请求。
-- 除已完成的 Customer List 前后端查询及其数据范围外，其余 Customer 写操作、详情、公海、Contact 与 FollowRecord 能力仍是后续实现基线。
+- `POST /api/customers` 要求 `customer:create`：纯 SUPER_ADMIN/SYSTEM_ADMIN 创建公海客户，纯 SALES_MANAGER/SALES_STAFF 创建归属自己的客户；跨类别或未知有效角色组合明确拒绝。
+- Customer 编号由后端使用 `KH + 雪花主键` 生成，客户端不能指定编号、owner 或审计字段；同名、同电话和同邮箱允许创建。
+- 除已完成的 Customer List 和 Customer Create 后端外，其余 Customer 写操作、详情、公海、Contact 与 FollowRecord 能力仍是后续实现基线。
 
 ## 21. Known Issues and Deferred Work
 
