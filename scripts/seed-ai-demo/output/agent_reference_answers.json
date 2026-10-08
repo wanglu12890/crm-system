@@ -1,0 +1,274 @@
+{
+  "dataset": "crm_ai_agent_v1",
+  "analysisAsOf": "2026-10-01T00:00:00",
+  "timeBoundary": "left-closed/right-open; follow_at < analysis_as_of",
+  "answers": {
+    "customerTotal": 300,
+    "publicPoolCustomers": 30,
+    "levels": {
+      "A": 45,
+      "C": 105,
+      "D": 45,
+      "UNRATED": 15,
+      "B": 90
+    },
+    "privateCustomersByDepartment": {
+      "SALES_DEPT_01": 135,
+      "SALES_DEPT_02": 135
+    },
+    "customersByOwner": {
+      "sales_manager01": 35,
+      "sales_manager02": 50,
+      "sales_staff01": 55,
+      "sales_staff02": 45,
+      "sales_staff03": 85
+    },
+    "largestIndustry": [
+      "制造业",
+      90
+    ],
+    "customersWithoutFollowInLast30Days": 120,
+    "aLevelWithoutFollowInLast30Days": 28,
+    "customersCreatedInLast90Days": 100,
+    "neverFollowedCustomerNos": [
+      "KH2308100000000000012",
+      "KH2308100000000000016",
+      "KH2308100000000000017",
+      "KH2308100000000000031",
+      "KH2308100000000000043",
+      "KH2308100000000000059",
+      "KH2308100000000000073",
+      "KH2308100000000000074",
+      "KH2308100000000000079",
+      "KH2308100000000000088",
+      "KH2308100000000000089",
+      "KH2308100000000000116",
+      "KH2308100000000000125",
+      "KH2308100000000000133",
+      "KH2308100000000000151",
+      "KH2308100000000000162",
+      "KH2308100000000000164",
+      "KH2308100000000000173",
+      "KH2308100000000000193",
+      "KH2308100000000000201",
+      "KH2308100000000000202",
+      "KH2308100000000000213",
+      "KH2308100000000000228",
+      "KH2308100000000000240",
+      "KH2308100000000000268",
+      "KH2308100000000000269",
+      "KH2308100000000000273",
+      "KH2308100000000000275",
+      "KH2308100000000000282",
+      "KH2308100000000000293"
+    ],
+    "visiblePrivateCounts": {
+      "SUPER_ADMIN": 270,
+      "SYSTEM_ADMIN": 270,
+      "sales_manager01": 135,
+      "sales_manager02": 135,
+      "sales_staff01": 55,
+      "sales_staff02": 45,
+      "sales_staff03": 85
+    },
+    "visiblePublicPoolCounts": {
+      "SUPER_ADMIN": 30,
+      "SYSTEM_ADMIN": 30,
+      "sales_manager01": 30,
+      "sales_manager02": 30,
+      "sales_staff01": 30,
+      "sales_staff02": 30,
+      "sales_staff03": 30
+    },
+    "topProvince": [
+      "广东省",
+      55
+    ],
+    "guangdongCities": {
+      "东莞市": 10,
+      "佛山市": 10,
+      "广州市": 15,
+      "深圳市": 20
+    },
+    "hunanALevelCustomers": [
+      {
+        "customerNo": "KH2308100000000000068",
+        "customerName": "株洲青禾信息服务演示有限公司"
+      },
+      {
+        "customerNo": "KH2308100000000000092",
+        "customerName": "长沙青禾企业服务演示有限公司"
+      },
+      {
+        "customerNo": "KH2308100000000000155",
+        "customerName": "长沙凌峰实业演示有限公司"
+      },
+      {
+        "customerNo": "KH2308100000000000181",
+        "customerName": "长沙云帆企业服务演示有限公司"
+      },
+      {
+        "customerNo": "KH2308100000000000190",
+        "customerName": "长沙嘉木企业服务演示有限公司"
+      },
+      {
+        "customerNo": "KH2308100000000000198",
+        "customerName": "吴宁（AI演示客户）"
+      },
+      {
+        "customerNo": "KH2308100000000000220",
+        "customerName": "株洲清越商贸演示有限公司"
+      }
+    ],
+    "manufacturingCustomersByCity": {
+      "上海市": 13,
+      "成都市": 8,
+      "杭州市": 8,
+      "佛山市": 6,
+      "深圳市": 6,
+      "长沙市": 6,
+      "南京市": 5,
+      "武汉市": 5,
+      "青岛市": 5,
+      "宁波市": 4,
+      "济南市": 4,
+      "苏州市": 4,
+      "北京市": 3,
+      "东莞市": 2,
+      "广州市": 2,
+      "无锡市": 2,
+      "株洲市": 2,
+      "福州市": 2,
+      "厦门市": 1,
+      "嘉兴市": 1,
+      "宜昌市": 1
+    },
+    "departmentProvinceCoverage": {
+      "SALES_DEPT_01": {
+        "上海市": 16,
+        "北京市": 9,
+        "四川省": 9,
+        "山东省": 8,
+        "广东省": 29,
+        "江苏省": 18,
+        "浙江省": 21,
+        "湖北省": 11,
+        "湖南省": 10,
+        "福建省": 4
+      },
+      "SALES_DEPT_02": {
+        "上海市": 7,
+        "北京市": 15,
+        "四川省": 14,
+        "山东省": 10,
+        "广东省": 22,
+        "江苏省": 24,
+        "浙江省": 15,
+        "湖北省": 6,
+        "湖南省": 17,
+        "福建省": 5
+      }
+    },
+    "southChinaImportantCustomersWithoutFollowInLast30Days": [
+      {
+        "customerNo": "KH2308100000000000016",
+        "customerName": "李言（AI演示客户）",
+        "level": "B",
+        "province": "广东省",
+        "city": "深圳市"
+      },
+      {
+        "customerNo": "KH2308100000000000021",
+        "customerName": "广州博睿智造演示有限公司",
+        "level": "A",
+        "province": "广东省",
+        "city": "广州市"
+      },
+      {
+        "customerNo": "KH2308100000000000038",
+        "customerName": "深圳启辰供应链演示有限公司",
+        "level": "B",
+        "province": "广东省",
+        "city": "深圳市"
+      },
+      {
+        "customerNo": "KH2308100000000000088",
+        "customerName": "广州清越企业服务演示有限公司",
+        "level": "B",
+        "province": "广东省",
+        "city": "广州市"
+      },
+      {
+        "customerNo": "KH2308100000000000170",
+        "customerName": "佛山启辰产业发展演示有限公司",
+        "level": "B",
+        "province": "广东省",
+        "city": "佛山市"
+      },
+      {
+        "customerNo": "KH2308100000000000178",
+        "customerName": "东莞嘉木产业发展演示有限公司",
+        "level": "B",
+        "province": "广东省",
+        "city": "东莞市"
+      },
+      {
+        "customerNo": "KH2308100000000000179",
+        "customerName": "佛山凌峰产业发展演示有限公司",
+        "level": "B",
+        "province": "广东省",
+        "city": "佛山市"
+      },
+      {
+        "customerNo": "KH2308100000000000186",
+        "customerName": "广州新岭企业服务演示有限公司",
+        "level": "B",
+        "province": "广东省",
+        "city": "广州市"
+      },
+      {
+        "customerNo": "KH2308100000000000215",
+        "customerName": "深圳凌峰智造演示有限公司",
+        "level": "A",
+        "province": "广东省",
+        "city": "深圳市"
+      },
+      {
+        "customerNo": "KH2308100000000000252",
+        "customerName": "佛山万象实业演示有限公司",
+        "level": "A",
+        "province": "广东省",
+        "city": "佛山市"
+      },
+      {
+        "customerNo": "KH2308100000000000286",
+        "customerName": "广州嘉木企业服务演示有限公司",
+        "level": "B",
+        "province": "广东省",
+        "city": "广州市"
+      },
+      {
+        "customerNo": "KH2308100000000000287",
+        "customerName": "佛山凌峰企业服务演示有限公司",
+        "level": "A",
+        "province": "广东省",
+        "city": "佛山市"
+      }
+    ]
+  },
+  "definitions": {
+    "southChina": [
+      "广东省",
+      "广西壮族自治区",
+      "海南省",
+      "澳门特别行政区",
+      "香港特别行政区"
+    ],
+    "importantCustomerLevels": [
+      "A",
+      "B"
+    ],
+    "staleThreshold": "latest follow_at < 2026-09-01T00:00:00 or never followed"
+  },
+  "scopeNote": "Counts cover this synthetic batch only. Private list excludes public-pool customers; public-pool counts require the dedicated pool permission."
+}

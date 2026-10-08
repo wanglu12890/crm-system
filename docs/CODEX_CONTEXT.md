@@ -460,7 +460,7 @@ npm.cmd run build
 | Permission Management | tree/list/overview | Implemented | 只读管理视图，无权限 CRUD |
 | Customer/Contact/Follow-up | customer list + customer create + rules/schema | Partially implemented | 客户列表和 `POST /api/customers` 创建流程已完成前后端；尚无详情/编辑、公海、联系人和跟进实现 |
 | Clue/Opportunity/Contract | schema + menu placeholder | Not implemented | 无后端业务层和真实前端页面 |
-| Analytics/AI | menu placeholder | Not implemented | 无真实数据或 API |
+| Analytics/AI | menu placeholder + deterministic demo dataset tooling | Not implemented | 无 Agent/API；`scripts/seed-ai-demo` 可离线生成经校验的 300 Customer、450 Contact、1,200 FollowRecord 合成数据及标准答案，SQL 仅允许人工审核后导入开发库 |
 
 ### Customer Management V1 Baseline
 

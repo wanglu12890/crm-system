@@ -1,0 +1,22 @@
+{
+  "dataset": {
+    "name": "crm_ai_agent_v1",
+    "seed": 42,
+    "analysis_as_of": "2026-10-01T00:00:00",
+    "database": "crm_system"
+  },
+  "counts": { "customers": 300, "contacts": 450, "follow_records": 1200 },
+  "id_ranges": {
+    "customer_start": 2308100000000000001,
+    "contact_start": 2308101000000000001,
+    "follow_record_start": 2308102000000000001
+  },
+  "users": {
+    "sales_manager01": { "id": 2107447193143648258, "role_code": "SALES_MANAGER", "dept_id": 2206070000000000001, "dept_code": "SALES_DEPT_01", "count": 35 },
+    "sales_staff01":   { "id": 2107447512812527618, "role_code": "SALES_STAFF", "dept_id": 2206070000000000001, "dept_code": "SALES_DEPT_01", "count": 55 },
+    "sales_staff02":   { "id": 2107447685940813826, "role_code": "SALES_STAFF", "dept_id": 2206070000000000001, "dept_code": "SALES_DEPT_01", "count": 45 },
+    "sales_manager02": { "id": 2107682836507561985, "role_code": "SALES_MANAGER", "dept_id": 2206070000000000002, "dept_code": "SALES_DEPT_02", "count": 50 },
+    "sales_staff03":   { "id": 2107683040359124993, "role_code": "SALES_STAFF", "dept_id": 2206070000000000002, "dept_code": "SALES_DEPT_02", "count": 85 }
+  },
+  "public_pool_count": 30
+}
