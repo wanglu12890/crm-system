@@ -27,7 +27,7 @@
 
 ### Backend
 
-- Java 17、Maven、Spring Boot 3.3.x。
+- Java 17、Maven、Spring Boot 3.5.x（当前父 POM 为 3.5.16）。
 - Spring Web、Spring Validation、Spring Security 6 风格配置。
 - MyBatis-Plus 3.5.x，Mapper 当前主要使用注解 SQL 和 BaseMapper。
 - MySQL 8，HikariCP。
