@@ -4,6 +4,7 @@ import axios from 'axios'
 import { ElMessage } from 'element-plus'
 import CustomerSearch from '@/components/business/customer/CustomerSearch.vue'
 import CustomerTable from '@/components/business/customer/CustomerTable.vue'
+import CustomerFormDialog from '@/components/business/customer/CustomerFormDialog.vue'
 import { getCustomerList } from '@/api/customer'
 import { getUserList } from '@/api/user'
 import { useAuthStore } from '@/stores/auth'
@@ -33,6 +34,7 @@ const loading = ref(false)
 const page = ref(1)
 const size = ref(DEFAULT_PAGE_SIZE)
 const total = ref(0)
+const createDialogVisible = ref(false)
 const searchCriteria = ref<CustomerSearchCriteria>(emptyCriteria())
 
 const buildQuery = (): CustomerListQuery => ({
@@ -102,6 +104,14 @@ const handleCurrentChange = async (value: number) => {
   await loadCustomers()
 }
 
+const handleCreate = () => {
+  createDialogVisible.value = true
+}
+
+const handleCreateSuccess = async () => {
+  await loadCustomers()
+}
+
 const showPendingFeature = (feature: string) => {
   ElMessage.info(`${feature}功能待实现`)
 }
@@ -134,7 +144,7 @@ onMounted(() => {
     />
 
     <div v-if="canCreateCustomer" class="customer-page__toolbar">
-      <el-button type="primary" @click="showPendingFeature('新建客户')">新建客户</el-button>
+      <el-button type="primary" @click="handleCreate">新建客户</el-button>
     </div>
 
     <CustomerTable
@@ -157,6 +167,11 @@ onMounted(() => {
         @current-change="handleCurrentChange"
       />
     </div>
+
+    <CustomerFormDialog
+      v-model="createDialogVisible"
+      @success="handleCreateSuccess"
+    />
   </section>
 </template>
 
