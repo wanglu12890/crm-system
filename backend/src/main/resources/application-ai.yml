@@ -1,0 +1,17 @@
+spring:
+  config:
+    activate:
+      on-profile: ai
+  ai:
+    model:
+      chat: openai
+      embedding: none
+    openai:
+      api-key: ${DASHSCOPE_API_KEY}
+      base-url: https://dashscope.aliyuncs.com/compatible-mode
+      chat:
+        completions-path: /v1/chat/completions
+        options:
+          model: qwen-plus
+          temperature: 0.2
+

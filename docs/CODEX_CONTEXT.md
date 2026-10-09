@@ -531,6 +531,14 @@ npm.cmd run build
 
 不要因为变量改名、普通 DTO、局部样式、一行 SQL 或单个测试方法而追加记录。更新时应删除失效事实并压缩重复内容，保持 high-signal、low-noise；本文档不是任务执行日志或 Git changelog。
 
+## 24. Spring AI 基础设施
+
+- 后端已引入 Spring AI 1.1.8 BOM 与 OpenAI 模型 Starter，通过阿里云百炼 OpenAI 兼容接口连接 `qwen-plus`。
+- 普通运行和测试默认设置 `spring.ai.model.chat=none`；只有显式启用 `ai` Profile 才创建 Qwen `ChatClient` 及冒烟组件。
+- 百炼密钥仅从 `DASHSCOPE_API_KEY` 读取；真实模型测试还要求 `RUN_QWEN_INTEGRATION=true`，普通 `mvn test` 不产生模型调用或费用。
+- 当前只实现无 HTTP 入口的文本与固定非敏感 Tool Calling 冒烟基础设施；尚未实现 CRM AI Agent、客户统计工具、数据库访问或前端 AI 页面。
+- 真实 `qwen-plus` 文本调用与 Tool Calling 已于 2026-10-10 通过显式集成测试；普通 `mvn test` 仍默认跳过该付费测试。
+
 ## Terminology
 
 - Method-level authorization:

@@ -1,6 +1,6 @@
 # CRM AI Agent V1 技术栈与架构基线
 
-> 文档状态：技术方案已选定，尚未实施与验收  
+> 文档状态：Spring AI 基础设施、真实百炼文本调用与 Tool Calling 已完成验收
 > 适用范围：CRM AI 销售分析助手 V1 第一阶段  
 > 项目路径：`D:\MyProjectPractice\crm-system`  
 > 建议保存：`docs/ai-agent/AI_AGENT_V1_TECH_STACK.md`
@@ -23,7 +23,7 @@
 |---|---|---|---|
 | Java | 17 | 17 | 保持不变 |
 | Spring Boot | 3.3.5 | 3.5.16 | 先独立升级、回归测试 |
-| Spring AI | 未引入 | 1.1.8 | 使用 GA 版本与 BOM，升级完成后接入 |
+| Spring AI | 已引入 1.1.8 | 1.1.8 | BOM + OpenAI 模型 Starter；仅在 `ai` Profile 启用模型 |
 | Spring Security / JWT | 已实现 | 复用现有 | 认证、方法权限与身份来源 |
 | MyBatis-Plus | 3.5.7 | 优先保持，兼容性验证 | 不为 AI 任意升级 |
 | MySQL | 8.x | 保持不变 | 业务数据与聚合 SQL |
@@ -31,11 +31,11 @@
 | Vue / TypeScript | Vue 3.5.12 / TS 5.6.x | 保持现有 | 前端工作区 |
 | Element Plus | 2.8.x | 保持现有 | UI 组件 |
 | Axios | 1.7.x | 保持现有 | AI 接口设置独立超时 |
-| LLM 服务 | 未接入 | 阿里云百炼 | API Key 通过环境变量配置 |
-| 模型 | 未接入 | Qwen-Plus（初选） | 以实际 Tool Calling 测试结果确定模型版本 |
-| 模型接入 | 未接入 | Spring AI OpenAI 兼容接入 | 验证百炼兼容接口与工具调用能力 |
+| LLM 服务 | 已通过真实调用验收 | 阿里云百炼 | API Key 仅通过 `DASHSCOPE_API_KEY` 环境变量读取 |
+| 模型 | `qwen-plus` 已通过文本与 Tool Calling 验收 | Qwen-Plus | 保持显式付费测试策略 |
+| 模型接入 | 已完成基础接入验收 | Spring AI OpenAI 兼容接入 | `qwen-plus`；显式集成测试与普通构建隔离 |
 
-**状态说明**：目标版本是计划采用的基线，不表示项目已经完成升级、依赖解析或运行验收。实施时须重新核对官方兼容要求、可用依赖和 API 文档；如存在差异，应先更新本文件并获得确认。
+**状态说明**：Spring Boot 升级、Spring AI 基础依赖、配置、本地测试以及真实百炼文本与 Tool Calling 验收已经完成。后续实施仍须核对实际依赖和 API 行为；如存在差异，应先更新本文件并获得确认。
 
 官方参考入口：
 
