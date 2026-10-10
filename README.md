@@ -114,10 +114,11 @@ $env:JWT_SECRET='your-random-secret-at-least-32-bytes'
 ```bash
 cd backend
 mvn clean install
-mvn spring-boot:run
+mvn spring-boot:run "-Dspring-boot.run.arguments=--spring.config.additional-location=optional:file:./src/main/resources/"
 ```
+启动命令：mvn -s .mvn/settings.xml spring-boot:run "-Dspring-boot.run.arguments=--spring.profiles.active=local --spring.config.additional-location=file:./src/main/resources/"
 
-后端默认地址为 `http://localhost:8080/api`。数据库必须已初始化且连接变量有效。
+后端默认地址为 `http://localhost:8080/api`。数据库必须已初始化且连接变量有效。`application-local.yml` 仅作为本机外部配置使用，不会进入 Maven 构建产物；上述参数显式将其所在目录加入 Spring Boot 外部配置搜索路径。
 
 前端：
 

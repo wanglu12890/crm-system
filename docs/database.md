@@ -105,10 +105,10 @@ $env:JWT_SECRET='<至少32字节的随机密钥>'
 
 ```powershell
 cd backend
-mvn -s .mvn/settings.xml clean spring-boot:run
+mvn -s .mvn/settings.xml clean spring-boot:run "-Dspring-boot.run.arguments=--spring.config.additional-location=optional:file:./src/main/resources/"
 ```
 
-环境变量只对当前终端会话生效。团队开发可在 IDE Run Configuration 中配置；生产环境使用容器 Secret 或云密钥服务，禁止提交 `.env`、YAML 密码或带密码的命令行。
+环境变量只对当前终端会话生效。本地 `application-local.yml` 已从 Maven 资源处理中排除，上述启动参数将它作为外部配置加载。团队开发可在 IDE Run Configuration 中设置同样的 `spring.config.additional-location` 参数；生产环境使用容器 Secret 或云密钥服务，禁止提交 `.env`、YAML 密码或带密码的命令行。
 
 ## 6. 后续迁移策略
 
