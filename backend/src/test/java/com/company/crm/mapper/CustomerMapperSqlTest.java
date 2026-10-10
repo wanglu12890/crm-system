@@ -22,6 +22,27 @@ class CustomerMapperSqlTest {
             assertThat(xml).contains("owner.dept_id = #{dataScope.deptId}");
             assertThat(xml).contains("c.owner_id = #{dataScope.userId}");
             assertThat(xml).contains("c.owner_id = #{query.ownerId}");
+            assertThat(xml).contains("<sql id=\"customerVisibilityConditions\">");
+            assertThat(xml).contains("<include refid=\"customerVisibilityConditions\"/>");
+        }
+    }
+
+    @Test
+    void shouldUseOneAggregateQueryWithControlledTimeAndLevelConditions() throws IOException {
+        try (InputStream input = getClass().getResourceAsStream("/mapper/CustomerMapper.xml")) {
+            assertThat(input).isNotNull();
+            String xml = new String(input.readAllBytes(), StandardCharsets.UTF_8);
+
+            assertThat(xml).contains("selectCustomerStatistics");
+            assertThat(xml).contains("COUNT(*)");
+            assertThat(xml).contains("c.customer_level = 'A'");
+            assertThat(xml).contains("c.customer_level = 'B'");
+            assertThat(xml).contains("c.customer_level = 'C'");
+            assertThat(xml).contains("c.customer_level = 'D'");
+            assertThat(xml).contains("c.customer_level IS NULL");
+            assertThat(xml).contains("c.created_at &gt;= #{startTime}");
+            assertThat(xml).contains("c.created_at &lt; #{endTime}");
+            assertThat(xml).doesNotContain("NOW()", "CURDATE()");
         }
     }
 }

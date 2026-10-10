@@ -4,6 +4,26 @@
         "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.company.crm.mapper.CustomerMapper">
 
+    <!-- Shared security-sensitive visibility rules keep list and statistics semantics aligned. -->
+    <sql id="customerVisibilityConditions">
+        c.deleted = 0
+        AND c.owner_id IS NOT NULL
+        <choose>
+            <when test="dataScope.scopeCode == 'DEPT'">
+                AND owner.dept_id = #{dataScope.deptId}
+            </when>
+            <when test="dataScope.scopeCode == 'SELF'">
+                AND c.owner_id = #{dataScope.userId}
+            </when>
+            <when test="dataScope.scopeCode == 'ALL'">
+                <!-- ALL adds no owner restriction; public-pool exclusion still applies above. -->
+            </when>
+            <otherwise>
+                AND 1 = 0
+            </otherwise>
+        </choose>
+    </sql>
+
     <select id="selectCustomerPage" resultType="com.company.crm.vo.customer.CustomerListVO">
         SELECT CAST(c.id AS CHAR)            AS id,
                c.customer_no                AS customerNo,
@@ -17,8 +37,7 @@
                c.updated_at                  AS updatedAt
           FROM customer c
           LEFT JOIN sys_user owner ON owner.id = c.owner_id
-         WHERE c.deleted = 0
-           AND c.owner_id IS NOT NULL
+         WHERE <include refid="customerVisibilityConditions"/>
         <if test="query.keyword != null and query.keyword.trim() != ''">
            AND (c.customer_no LIKE CONCAT('%', #{query.keyword}, '%')
                 OR c.customer_name LIKE CONCAT('%', #{query.keyword}, '%'))
@@ -35,20 +54,23 @@
         <if test="query.ownerId != null">
            AND c.owner_id = #{query.ownerId}
         </if>
-        <choose>
-            <when test="dataScope.scopeCode == 'DEPT'">
-           AND owner.dept_id = #{dataScope.deptId}
-            </when>
-            <when test="dataScope.scopeCode == 'SELF'">
-           AND c.owner_id = #{dataScope.userId}
-            </when>
-            <when test="dataScope.scopeCode == 'ALL'">
-                <!-- ALL adds no owner restriction; public-pool exclusion still applies above. -->
-            </when>
-            <otherwise>
-           AND 1 = 0
-            </otherwise>
-        </choose>
          ORDER BY c.updated_at DESC, c.id DESC
+    </select>
+
+    <select id="selectCustomerStatistics"
+            resultType="com.company.crm.dto.statistics.CustomerStatisticsAggregate">
+        SELECT COUNT(*)                                   AS totalCustomers,
+               COALESCE(SUM(c.customer_level = 'A'), 0)   AS levelA,
+               COALESCE(SUM(c.customer_level = 'B'), 0)   AS levelB,
+               COALESCE(SUM(c.customer_level = 'C'), 0)   AS levelC,
+               COALESCE(SUM(c.customer_level = 'D'), 0)   AS levelD,
+               COALESCE(SUM(c.customer_level IS NULL), 0) AS unrated
+          FROM customer c
+          LEFT JOIN sys_user owner ON owner.id = c.owner_id
+         WHERE <include refid="customerVisibilityConditions"/>
+        <if test="startTime != null and endTime != null">
+           AND c.created_at &gt;= #{startTime}
+           AND c.created_at &lt; #{endTime}
+        </if>
     </select>
 </mapper>
