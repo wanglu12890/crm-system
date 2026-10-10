@@ -101,8 +101,8 @@ public class CustomerServiceImpl implements CustomerService {
                     operatorId, customerNo);
             throw new DuplicateCustomerNumberException();
         } catch (DataAccessException exception) {
-            log.error("Create customer database failure, operatorUserId={}, customerNo={}",
-                    operatorId, customerNo, exception);
+            log.error("Create customer database failure, operatorUserId={}, customerNo={}, failureType={}",
+                    operatorId, customerNo, exception.getClass().getSimpleName());
             throw new CustomerCreationException("客户保存失败，请稍后重试", exception);
         }
 

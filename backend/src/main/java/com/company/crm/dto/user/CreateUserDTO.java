@@ -8,6 +8,7 @@ import jakarta.validation.constraints.Size;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import lombok.Data;
+import lombok.ToString;
 
 import java.util.List;
 
@@ -24,6 +25,7 @@ public class CreateUserDTO {
 
     @NotBlank(message = "密码不能为空")
     @Size(min = 6, max = 64, message = "密码长度应为6到64个字符")
+    @ToString.Exclude
     private String password;
 
     @Pattern(regexp = "^$|^1\\d{10}$", message = "手机号格式不正确")

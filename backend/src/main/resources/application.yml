@@ -42,7 +42,7 @@ mybatis-plus:
   type-aliases-package: com.company.crm.entity
   configuration:
     map-underscore-to-camel-case: true
-    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+    log-impl: ${MYBATIS_LOG_IMPL:org.apache.ibatis.logging.nologging.NoLoggingImpl}
   global-config:
     banner: false
     db-config:
@@ -58,3 +58,6 @@ logging:
     org.springframework.boot.env: INFO
     org.springframework.boot.context.config: INFO
     org.springframework.core.env: INFO
+    org.apache.ibatis: INFO
+    com.baomidou.mybatisplus: INFO
+    com.company.crm.mapper: INFO

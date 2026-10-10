@@ -19,6 +19,8 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -34,7 +36,7 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-@ExtendWith(MockitoExtension.class)
+@ExtendWith({MockitoExtension.class, OutputCaptureExtension.class})
 class CustomerCreationServiceTest {
 
     private static final long OPERATOR_ID = 2107447512812527618L;
@@ -135,6 +137,28 @@ class CustomerCreationServiceTest {
         assertThatThrownBy(() -> customerService.createCustomer(validDto()))
                 .isInstanceOf(CustomerCreationException.class)
                 .hasMessage("客户保存失败，请稍后重试");
+    }
+
+    @Test
+    void shouldNotWriteDatabaseExceptionDetailsToBusinessLog(CapturedOutput output) {
+        String sensitiveDatabaseDetail = "fictional-sensitive-phone-in-sql";
+        authenticate(List.of("SALES_MANAGER"));
+        when(customerNumberGenerator.nextId()).thenReturn(101L);
+        when(customerNumberGenerator.customerNo(101L)).thenReturn("KH101");
+        DataAccessResourceFailureException databaseFailure = new DataAccessResourceFailureException(
+                "INSERT customer phone=" + sensitiveDatabaseDetail
+        );
+        when(customerMapper.insert(any(Customer.class))).thenThrow(databaseFailure);
+
+        assertThatThrownBy(() -> customerService.createCustomer(validDto()))
+                .isInstanceOf(CustomerCreationException.class)
+                .hasMessage("客户保存失败，请稍后重试")
+                .hasCause(databaseFailure);
+
+        assertThat(output.getAll())
+                .contains("failureType=DataAccessResourceFailureException")
+                .doesNotContain(sensitiveDatabaseDetail)
+                .doesNotContain(databaseFailure.getMessage());
     }
 
     @Test

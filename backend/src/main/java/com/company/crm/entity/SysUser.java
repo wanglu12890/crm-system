@@ -6,6 +6,7 @@ import com.baomidou.mybatisplus.annotation.TableLogic;
 import com.baomidou.mybatisplus.annotation.TableName;
 import com.baomidou.mybatisplus.annotation.Version;
 import lombok.Data;
+import lombok.ToString;
 
 import java.time.LocalDateTime;
 
@@ -18,6 +19,7 @@ public class SysUser {
 
     private String username;
 
+    @ToString.Exclude
     private String passwordHash;
 
     private String realName;

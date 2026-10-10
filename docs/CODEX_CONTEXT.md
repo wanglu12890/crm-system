@@ -369,6 +369,9 @@ ROLE_SUPER_ADMIN AND permission:list
 - 使用构造注入，复用现有实体、Mapper、encoder 和认证 principal。
 - 重要写操作与拒绝事件使用 SLF4J 记录操作者 ID、目标 ID、稳定业务标识和结果。
 - 禁止记录明文密码、密码摘要、JWT、密钥或完整认证请求体。
+- MyBatis 默认及生产环境使用 `NoLoggingImpl`，MyBatis/Mapper 日志类别保持 INFO；本地只有显式设置 `MYBATIS_LOG_IMPL` 才能按需开启 SQL 调试，且不得在含真实敏感数据的环境输出参数。
+- 含密码、密码摘要或 access token 的 DTO、Entity、VO 必须排除或覆写 `toString()` 中的敏感字段；这不改变 JSON 接口字段。
+- 数据访问异常的普通业务日志只记录操作阶段、非敏感标识和异常类别，不记录完整异常 message/堆栈；异常仍按原有语义向上转换或传播。
 - 不为局部功能另建重复的 Result、认证上下文或 JWT 工具体系。
 
 ## 17. Database Conventions
