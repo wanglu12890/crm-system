@@ -107,6 +107,15 @@ $env:DB_PASSWORD='your-password'
 $env:JWT_SECRET='your-random-secret-at-least-32-bytes'
 ```
 
+仅在全新环境首次创建管理员账号时，才在当前 PowerShell 会话显式设置：
+
+```powershell
+$env:CRM_ADMIN_INIT_ENABLED='true'
+$env:CRM_ADMIN_INIT_PASSWORD='<12 至 64 字符的临时初始密码>'
+```
+
+首次启动成功后应移除这两个会话变量；已有 `admin` 不会被修改密码或角色绑定。默认不开启管理员账号初始化。
+
 ## 启动方法
 
 后端：

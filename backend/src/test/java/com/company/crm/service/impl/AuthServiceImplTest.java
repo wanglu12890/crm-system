@@ -54,7 +54,7 @@ class AuthServiceImplTest {
         when(jwtProperties.getExpire()).thenReturn(7200L);
         when(sysUserMapper.updateLastLoginAt(any(), any())).thenReturn(1);
 
-        TokenVO result = authService.login(new LoginDTO(" admin ", "admin123456"));
+        TokenVO result = authService.login(new LoginDTO(" admin ", "test-login-password"));
 
         assertThat(result.accessToken()).isEqualTo("access-token");
         assertThat(result.expiresIn()).isEqualTo(7200L);
@@ -62,7 +62,7 @@ class AuthServiceImplTest {
         ArgumentCaptor<Authentication> authenticationCaptor = ArgumentCaptor.forClass(Authentication.class);
         verify(authenticationManager).authenticate(authenticationCaptor.capture());
         assertThat(authenticationCaptor.getValue().getPrincipal()).isEqualTo("admin");
-        assertThat(authenticationCaptor.getValue().getCredentials()).isEqualTo("admin123456");
+        assertThat(authenticationCaptor.getValue().getCredentials()).isEqualTo("test-login-password");
         verify(jwtService).generateAccessToken(user);
         verify(sysUserMapper).updateLastLoginAt(any(), any());
     }

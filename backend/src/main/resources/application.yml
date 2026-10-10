@@ -31,6 +31,12 @@ server:
   servlet:
     context-path: /api
 
+crm:
+  init:
+    admin:
+      enabled: ${CRM_ADMIN_INIT_ENABLED:false}
+      password: ${CRM_ADMIN_INIT_PASSWORD:}
+
 mybatis-plus:
   mapper-locations: classpath*:/mapper/**/*.xml
   type-aliases-package: com.company.crm.entity

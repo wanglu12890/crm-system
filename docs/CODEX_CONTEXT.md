@@ -199,7 +199,8 @@ allow access. Treat this as current enforcement behavior, not intended role poli
 
 ## 9. Root Administrator Protection
 
-- DataInitializer 确保存在一个初始化管理员用户、`SUPER_ADMIN` 角色及其关联。
+- DataInitializer 始终幂等确保 `SUPER_ADMIN` 基础角色存在；管理员账号初始化默认关闭，只有显式设置 `CRM_ADMIN_INIT_ENABLED=true` 且通过外部 `CRM_ADMIN_INIT_PASSWORD` 提供 12～64 字符密码时才会创建新 `admin` 及角色关联。
+- 已有 `admin` 时初始化器不会修改其密码或角色绑定；初始密码只经现有 `PasswordEncoder` 写入 BCrypt 摘要，日志不记录明文或摘要。
 - 当前根用户识别依赖“初始化用户名 + 完整角色集中含 SUPER_ADMIN”，数据库没有独立 root/system 标识。
 - 根用户可以更新个人资料，但不能通过用户编辑接口改变角色集合或状态。
 - 任何带 `SUPER_ADMIN` 角色的用户都不能通过管理员重置密码接口被重置，包括根用户。
@@ -486,7 +487,6 @@ npm.cmd run build
 - reset password 后 JWT 不立即失效
 - /auth/me ID 类型不一致
 - user create 的 Service defense 不完整
-- DataInitializer bootstrap credential
 - RoleServiceImpl.createRole transaction inconsistency
 
 ### 21.2 Deferred Features / Engineering Work

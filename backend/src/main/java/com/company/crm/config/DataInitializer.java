@@ -14,11 +14,12 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.CommandLineRunner;  
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
-import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 
-//Spring Boot应用程序启动时，DataInitializer类会被自动扫描和实例化，并在应用启动完成后执行其run方法，从而确保超级管理员角色、管理员账户以及它们之间的关系被正确初始化。
+// Spring Boot 启动后始终保证基础 SUPER_ADMIN 角色存在；管理员账号必须显式启用后才会初始化。
 
 // @ 表示注解的开始，注解是Java的一种元数据机制，用于在代码中添加额外的信息，通常用于配置、标记或提供编译时和运行时的指令。类似于装饰器，它们可以附加在类、方法、字段等元素上，以改变其行为或提供额外的功能。
 // 怎么理解这些注解呢？可以将它们看作是对代码的“标签”或“说明”，告诉编译器或运行时环境如何处理这些代码。
@@ -43,12 +44,14 @@ public class DataInitializer implements CommandLineRunner {
 
     private static final String SUPER_ADMIN_ROLE_CODE = "SUPER_ADMIN";  // 定义一个常量，表示超级管理员角色的唯一标识符，用于在数据库中查找或创建该角色。
     private static final String INITIAL_ADMIN_USERNAME = "admin";
-    private static final String INITIAL_ADMIN_PASSWORD = "admin123456";
+    private static final int MIN_INITIAL_PASSWORD_LENGTH = 12;
+    private static final int MAX_INITIAL_PASSWORD_LENGTH = 64;
 
     private final SysRoleMapper sysRoleMapper; // 定义一个私有的、不可变的SysRoleMapper对象，用于与数据库中的sys_role表进行交互，实现角色相关的数据操作。
     private final SysUserMapper sysUserMapper;
     private final SysUserRoleMapper sysUserRoleMapper;
-    private final BCryptPasswordEncoder passwordEncoder;
+    private final PasswordEncoder passwordEncoder;
+    private final AdminInitializationProperties adminInitializationProperties;
 
     // @Override注解用于标识该方法是对父类或接口中定义的方法的重写，确保方法签名正确并提供编译时检查。
     @Override  
@@ -58,8 +61,27 @@ public class DataInitializer implements CommandLineRunner {
     // run方法是CommandLineRunner接口中定义的抽象方法，它在Spring Boot应用启动完成后被自动调用，用于执行数据初始化逻辑。
     public void run(String... args) {
         SysRole superAdminRole = getOrCreateSuperAdminRole();
-        SysUser adminUser = getOrCreateAdminUser();
-        ensureUserRoleRelation(adminUser.getId(), superAdminRole.getId());
+
+        if (!adminInitializationProperties.isEnabled()) {
+            log.info("Administrator account initialization is disabled.");
+            return;
+        }
+
+        SysUser existingUser = findAdminUser();
+        if (existingUser != null) {
+            log.info("Administrator account already exists; credentials and role bindings were left unchanged.");
+            return;
+        }
+
+        String initialPassword = adminInitializationProperties.getPassword();
+        if (!isValidInitialPassword(initialPassword)) {
+            log.error("Administrator account initialization skipped: the external initial password is missing or invalid.");
+            return;
+        }
+
+        SysUser adminUser = createAdminUser(initialPassword);
+        createUserRoleRelation(adminUser.getId(), superAdminRole.getId());
+        log.info("Administrator account initialized successfully.");
     }
 
     // getOrCreateSuperAdminRole方法用于获取或创建超级管理员角色。它首先查询数据库中是否存在具有指定角色代码的角色，如果存在，则返回该角色；如果不存在，则创建一个新的超级管理员角色，并将其插入数据库中。
@@ -89,46 +111,37 @@ public class DataInitializer implements CommandLineRunner {
         return role;
     }
 
-    private SysUser getOrCreateAdminUser() {
-        SysUser existingUser = sysUserMapper.selectOne(
+    private SysUser findAdminUser() {
+        return sysUserMapper.selectOne(
                 Wrappers.<SysUser>lambdaQuery()
                         .eq(SysUser::getUsername, INITIAL_ADMIN_USERNAME)
                         .last("LIMIT 1")
         );
-        if (existingUser != null) {
-            log.debug("Administrator account already exists, initialization skipped.");
-            return existingUser;
-        }
+    }
 
+    private boolean isValidInitialPassword(String password) {
+        return StringUtils.hasText(password)
+                && password.length() >= MIN_INITIAL_PASSWORD_LENGTH
+                && password.length() <= MAX_INITIAL_PASSWORD_LENGTH;
+    }
+
+    private SysUser createAdminUser(String initialPassword) {
         SysUser user = new SysUser();
         user.setUsername(INITIAL_ADMIN_USERNAME);
-        user.setPasswordHash(passwordEncoder.encode(INITIAL_ADMIN_PASSWORD));
+        user.setPasswordHash(passwordEncoder.encode(initialPassword));
         user.setRealName("系统管理员");
         user.setStatus(1);
         user.setDeleted(0);
         user.setVersion(0);
         sysUserMapper.insert(user);
-        log.info("Administrator account initialized. Change the initial password after first login.");
         return user;
     }
 
-    // ensureUserRoleRelation方法用于确保管理员用户与超级管理员角色之间的关系存在。
-    // 它首先查询数据库中是否已经存在该用户与角色的关联关系，如果存在，则记录调试日志并跳过初始化；如果不存在，则创建一个新的SysUserRole对象，将用户ID和角色ID设置为对应的值，并将其插入数据库中。
-    private void ensureUserRoleRelation(Long userId, Long roleId) {
-        Long relationCount = sysUserRoleMapper.selectCount(
-                Wrappers.<SysUserRole>lambdaQuery()
-                        .eq(SysUserRole::getUserId, userId)
-                        .eq(SysUserRole::getRoleId, roleId)
-        );
-        if (relationCount > 0) {
-            log.debug("Administrator role relation already exists, initialization skipped.");
-            return;
-        }
-
+    // 该方法只用于本次新建的管理员；已有管理员不会被隐式修改角色关系。
+    private void createUserRoleRelation(Long userId, Long roleId) {
         SysUserRole userRole = new SysUserRole(); // 创建一个新的SysUserRole对象，用于表示管理员用户与超级管理员角色之间的关联关系。
         userRole.setUserId(userId); // 设置用户角色关联表的userId字段为管理员用户的ID，表示该关联关系属于该用户。
         userRole.setRoleId(roleId); 
         sysUserRoleMapper.insert(userRole); // 将新建用户角色关联记录插入表中
-        log.info("Administrator role relation initialized.");
     }
 }
