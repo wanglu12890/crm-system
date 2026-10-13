@@ -1,18 +1,57 @@
 # CRM Project Instructions
 
-Before modifying project code:
+## 1. 工作原则
 
-1. Read `docs/CODEX_CONTEXT.md`.
-2. Inspect existing related implementations.
-3. Treat actual source code as authoritative when documentation differs.
+- 先阅读当前任务说明，再检查与任务直接相关的代码、测试、配置和文档。
+- 实际源码与自动化测试是当前行为的最高事实来源；文档冲突时以代码为准，并在报告中指出差异。
+- 只修改完成任务所必需的文件，保留用户已有和未提交的改动，不做无关重构。
+- 未经明确要求，不扩大业务范围，不自动执行数据库写入、外部服务调用或环境配置变更。
 
-For frontend tasks:
-- Read `docs/development/FRONTEND_CONVENTIONS.md`.
-- Follow existing Vue3 component organization and UI conventions.
-- Prefer established View + Search + Table + Dialog boundaries.
-- Avoid unrelated refactoring.
+## 2. 文档读取策略
 
-For business rules:
-- Read the relevant module documentation.
+按任务类型选择性读取，不要求每次完整加载全部项目文档：
 
-Do not execute git commit unless explicitly requested.
+1. 所有任务：读取任务文件和直接相关实现。
+2. 前端任务：读取 `docs/development/FRONTEND_CONVENTIONS.md`。
+3. 后端任务：读取 `docs/development/BACKEND_CONVENTIONS.md`。
+4. 业务规则任务：读取对应模块文档，例如客户模块的 `docs/customer-management/CUSTOMER_V1_RULES.md`。
+5. 跨模块、架构、项目现状或背景不明确时：读取 `docs/CODEX_CONTEXT.md`。
+6. AI Agent 任务：按需读取 `docs/ai-agent/` 中对应的需求、数据设计或技术栈文档。
+
+`docs/historical/` 是历史验收与阶段报告，默认不读取；只有追溯设计背景、迁移过程或历史结论时再查阅。不要默认遍历完整 Git 历史、整个 `task/` 或全部文档。
+
+## 3. 代码与业务证据
+
+- 事实优先级：生产代码 → 自动化测试 → 数据库结构/SQL → 配置与运行结果 → 当前规范文档 → 历史文档。
+- 修改前先检查同模块或相似模块的现有实现，复用已有分层、类型、工具和错误处理方式。
+- 涉及字段、状态、权限码、数据范围或接口结构时，不猜测；从实体、SQL、测试和真实调用链确认。
+- 前端可见性控制不能替代后端授权；涉及对象边界或数据范围时，必须检查后端强制约束。
+
+## 4. 开发执行
+
+- 前端遵循现有 Vue 3 + TypeScript 组织方式，优先采用已形成的 View + Search + Table + Dialog 职责边界。
+- 后端遵循 Controller → Service → Mapper 分层，DTO/VO 与 Entity 分离；安全、事务、异常和 SQL 规则见后端规范。
+- 优先最小改动和现有风格，不重复创建同类 API、Store、工具、响应体系或基础设施。
+- 敏感配置通过环境变量或未跟踪的本地配置提供；禁止提交密码、Token、API Key 或可用密钥。
+
+## 5. 测试策略
+
+- 按风险分层验证：先运行直接相关测试，再运行受影响模块测试；跨模块、基础设施或高风险改动才扩大到完整回归。
+- 前端改动至少执行相关类型检查或构建；纯文档改动只做 Markdown 引用、路径和 Git diff 检查。
+- 安全边界、数据权限、事务一致性和敏感信息保护的必要测试不得以“改动较小”为由省略。
+- 大量测试或构建输出优先写入临时日志，再读取摘要和失败详情，避免无意义地占用上下文。
+- 若因环境、依赖或外部服务无法验证，明确记录未验证项和原因，不伪造通过结论。
+
+## 6. Git 与安全
+
+- 未经用户明确要求，不执行 `git commit` 或 `git push`。
+- 不使用破坏性 Git 命令覆盖工作区，不清理或回退不属于当前任务的改动。
+- 提交前置分析或文件分组任务保持只读，得到确认后再执行暂存或提交。
+- 不在命令输出、日志、文档或测试夹具中暴露真实凭据；发现疑似泄露时先停止扩散并报告。
+
+## 7. 完成报告
+
+- 说明新增/修改/移动的文件及核心行为。
+- 列出实际执行的检查和测试结果，区分通过、失败与未执行。
+- 报告发现但未在任务范围内处理的问题，不顺手扩大修改范围。
+- 给出仍存在的限制和最小下一步建议。

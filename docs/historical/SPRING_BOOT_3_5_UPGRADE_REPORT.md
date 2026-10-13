@@ -19,7 +19,7 @@ Spring 官方已发布 Spring Boot 3.5.16，并说明该版本最低要求 Java 
 
 - `backend/pom.xml`：仅将 Spring Boot Parent 从 3.3.5 调整为 3.5.16。
 - `docs/CODEX_CONTEXT.md`：同步当前后端技术基线。
-- `docs/development/SPRING_BOOT_3_5_UPGRADE_REPORT.md`：记录升级与验证结果。
+- `docs/historical/SPRING_BOOT_3_5_UPGRADE_REPORT.md`：记录升级与验证结果。
 
 未修改前端、数据库结构、初始化数据、业务规则、安全规则或权限矩阵；未引入 Spring AI。
 
