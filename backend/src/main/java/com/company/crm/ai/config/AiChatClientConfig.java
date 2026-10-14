@@ -15,6 +15,17 @@ import org.springframework.context.annotation.Profile;
 @Profile("ai")
 public class AiChatClientConfig {
 
+    @Bean
+    public org.springframework.boot.web.client.RestClientCustomizer aiHttpTimeouts() {
+        return builder -> {
+            var client = java.net.http.HttpClient.newBuilder()
+                    .connectTimeout(java.time.Duration.ofSeconds(5)).build();
+            var factory = new org.springframework.http.client.JdkClientHttpRequestFactory(client);
+            factory.setReadTimeout(java.time.Duration.ofSeconds(20));
+            builder.requestFactory(factory);
+        };
+    }
+
     @Bean("qwenChatClient")
     public ChatClient qwenChatClient(ChatClient.Builder builder) {
         return builder.build();

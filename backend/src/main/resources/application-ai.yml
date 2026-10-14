@@ -3,6 +3,8 @@ spring:
     activate:
       on-profile: ai
   ai:
+    retry:
+      max-attempts: 1
     model:
       chat: openai
       embedding: none
@@ -14,4 +16,11 @@ spring:
         options:
           model: qwen-plus
           temperature: 0.2
+
+# Keep model prompts and HTTP request bodies out of diagnostic DEBUG/TRACE logs.
+logging:
+  level:
+    org.springframework.ai: INFO
+    org.springframework.web.client: INFO
+    org.springframework.web.reactive.function.client: INFO
 
