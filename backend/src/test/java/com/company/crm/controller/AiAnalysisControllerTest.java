@@ -155,7 +155,7 @@ class AiAnalysisControllerTest {
         perform("{\"question\":\"本月新增了多少客户？\",\"userId\":999,\"dataScope\":\"ALL\"}",
                 securityUser(7L, "ai:analysis", "customer:list"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.answer").value("本月新增客户共 48 个。"))
+                .andExpect(jsonPath("$.answer").value("本人范围内，本月新增客户共 48 个。"))
                 .andExpect(jsonPath("$.intent").value("CUSTOMER_TOTAL"))
                 .andExpect(jsonPath("$.metrics.totalCustomers").value(48))
                 .andExpect(jsonPath("$.analysisContext.dataScope").value("SELF"))

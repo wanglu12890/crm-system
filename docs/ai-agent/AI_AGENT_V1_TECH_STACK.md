@@ -1,186 +1,148 @@
 # CRM AI Agent V1 技术栈与架构基线
 
-> 文档状态：Spring AI 基础设施、真实百炼文本调用与 Tool Calling 已完成验收
-> 适用范围：CRM AI 销售分析助手 V1 第一阶段  
-> 项目路径：`D:\MyProjectPractice\crm-system`  
-> 建议保存：`docs/ai-agent/AI_AGENT_V1_TECH_STACK.md`
+更新：2026-10-14。状态：S1/S2后端已实现，查询范围语义修复及单次C1真实回归通过；S3前端与端到端验收待开发。
 
-## 1. 目标与范围
+## 1. 技术栈与边界
 
-在现有 Java 单体 CRM 中集成基于 Spring AI 的 AI 销售分析助手，支持自然语言提问，经 LLM Tool Calling 调用后端受控统计服务，从 MySQL 查询授权范围内的真实业务统计，并返回可核验的自然语言答案和结构化指标。
+| 组件 | 当前实现 |
+|---|---|
+| Java / Spring Boot | Java17 / Boot3.5.16 |
+| Spring AI | 1.1.8 BOM及OpenAI模型Starter |
+| 模型 | 百炼OpenAI兼容API，qwen-plus，temperature=0.2 |
+| 认证与授权 | Spring Security、JWT、方法级双权限 |
+| 数据查询 | MyBatis-Plus3.5.7、现有CustomerMapper、MySQL8 |
+| 测试 | JUnit5、Mockito、AssertJ、MockMvc |
+| 前端 | 现有Vue3/TypeScript，AI页面为S3规划 |
 
-第一阶段仅实现：
+沿用Java单体，不引入LangChain4j、Python服务、通用Agent框架、RAG、向量库或多Agent。V1仅提供客户总量、A/B/C/D/未评级分布和四种创建时间窗口；无任意SQL、业务写操作、自定义日期、明细、公海统计、其他人员/部门、合同/商机/销售额或主动缩小组织范围。
 
-1. 客户总量统计；
-2. 客户等级分布统计（A/B/C/D/未评级）；
-3. 简单创建时间筛选（本月、上月、最近 30 天）。
-
-第一阶段必须验证工具调用、ALL/DEPT/SELF 数据权限与 SQL 统计正确性。不包含 RAG、向量数据库、MCP、多 Agent、任意 SQL、历史会话持久化、SSE 或图表。
-
-## 2. 现有技术栈与目标技术栈
-
-| 组件 | 审查时现状 | V1 目标 | 备注 |
-|---|---|---|---|
-| Java | 17 | 17 | 保持不变 |
-| Spring Boot | 3.3.5 | 3.5.16 | 先独立升级、回归测试 |
-| Spring AI | 已引入 1.1.8 | 1.1.8 | BOM + OpenAI 模型 Starter；仅在 `ai` Profile 启用模型 |
-| Spring Security / JWT | 已实现 | 复用现有 | 认证、方法权限与身份来源 |
-| MyBatis-Plus | 3.5.7 | 优先保持，兼容性验证 | 不为 AI 任意升级 |
-| MySQL | 8.x | 保持不变 | 业务数据与聚合 SQL |
-| Maven | 3.9.16 | 保持不变 | 依赖构建 |
-| Vue / TypeScript | Vue 3.5.12 / TS 5.6.x | 保持现有 | 前端工作区 |
-| Element Plus | 2.8.x | 保持现有 | UI 组件 |
-| Axios | 1.7.x | 保持现有 | AI 接口设置独立超时 |
-| LLM 服务 | 已通过真实调用验收 | 阿里云百炼 | API Key 仅通过 `DASHSCOPE_API_KEY` 环境变量读取 |
-| 模型 | `qwen-plus` 已通过文本与 Tool Calling 验收 | Qwen-Plus | 保持显式付费测试策略 |
-| 模型接入 | 已完成基础接入验收 | Spring AI OpenAI 兼容接入 | `qwen-plus`；显式集成测试与普通构建隔离 |
-
-**状态说明**：Spring Boot 升级、Spring AI 基础依赖、配置、本地测试以及真实百炼文本与 Tool Calling 验收已经完成。后续实施仍须核对实际依赖和 API 行为；如存在差异，应先更新本文件并获得确认。
-
-官方参考入口：
-
-- Spring AI: https://docs.spring.io/spring-ai/reference/
-- Spring AI Tool Calling: https://docs.spring.io/spring-ai/reference/api/tools.html
-- Spring AI Getting Started: https://docs.spring.io/spring-ai/reference/getting-started.html
-- Spring Boot: https://spring.io/projects/spring-boot
-- 阿里云百炼：以其官方 API 文档中的 OpenAI 兼容接口说明为准。
-
-## 3. 技术选型原则
-
-- 采用 **Spring AI**，不同时引入 LangChain4j。
-- 采用现有 **Spring Boot 单体应用**，不新增 Python Agent 服务或微服务。
-- 通过 **ChatClient + Tool Calling** 实现模型和业务工具交互。
-- 仅向模型暴露显式注册、只读、参数白名单的客户统计工具。
-- **LLM 不直接连接 MySQL，不执行任意 SQL，不决定权限范围**。
-- 统计数据由 Java Service/Mapper 生成；LLM 只负责理解问题、选择工具和解释结果。
-- 第一阶段普通 HTTP POST 即可，不引入 SSE。
-
-## 4. 后端职责与调用链
+## 2. 实际调用链
 
 ```text
-Vue3 AI 智能分析页面
-  -> AiAnalysisController（认证、ai:analysis、请求校验）
-  -> AiAnalysisService（ChatClient、工具注册、回答编排）
-  -> CustomerStatisticsTool（@Tool，业务参数白名单）
-  -> CustomerStatisticsService（customer:list、DataScope、时间校验、统计口径）
-  -> CustomerStatisticsMapper（COUNT / GROUP BY）
-  -> MySQL
+POST /api/ai/analysis
+  -> JWT恢复SecurityUser、Controller校验question和双权限
+  -> AiAnalysisService：Qwen结构化分类（无Tool）
+  -> Java协议/枚举校验
+  -> DataScopeResolver.resolve(authenticatedUserId, "customer:list")
+  -> 请求组织范围与可信有效范围匹配，不满足即422
+  -> CustomerStatisticsToolFactory创建请求独立Tool
+  -> Qwen Tool Calling（禁止自动执行）
+  -> Java校验唯一工具名、调用次数及timeRange
+  -> CustomerStatisticsTool.getCustomerStatistics(timeRange)
+  -> CustomerStatisticsServiceImpl：再次解析可信权限、计算时间窗口
+  -> CustomerMapper.selectCustomerStatistics（现有共享可见性SQL）
+  -> Java校验返回上下文、确定性生成回答
+  -> AiAnalysisVO直接返回200
 ```
 
-核心类的候选职责：
+Controller方法授权为 `hasAuthority('ai:analysis') and hasAuthority('customer:list')`，身份只来自认证principal。模型不接收身份参数，不靠执行线程重新读取SecurityContext恢复用户；Tool在创建时不可变绑定可信用户ID。前端可见性不能替代后端授权。
 
-- `AiAnalysisController`：获取可信认证主体，校验请求并控制 `ai:analysis` 访问。
-- `AiAnalysisService`：构造本次请求的分析上下文、调用 ChatClient、收集可信指标、返回响应。
-- `CustomerStatisticsTool`：薄适配层，仅接受统计类型与时间筛选等白名单业务参数。
-- `CustomerStatisticsService`：复用既有 `DataScopeResolver`，实施 `customer:list` 权限、参数和时间校验。
-- `CustomerStatisticsMapper`：聚合 SQL，不分页加载明细再计数。
-- `AnalysisContext`：请求级可信身份、授权范围、固定基准时间和结果收集机制；设计时保证并发隔离。
+## 3. 结构化分类与范围匹配
 
-具体类数量、包名及注入方式应在实现时依据当前项目结构最小化确定，不必机械创建所有候选类。
-
-## 5. 认证、授权与数据范围
-
-Agent 页面与入口权限：`ai:analysis`。客户统计工具额外要求 `customer:list`。
-
-现有 `DataScopeResolver` 是唯一有效范围解析入口：
-
-- ALL：当前有效角色授予的全范围；
-- DEPT：当前所属部门，**不包含下级部门**；无部门时拒绝；
-- SELF：本人负责客户；
-- 多角色有效范围按 ALL > DEPT > SELF；仅真正授予 `customer:list` 的有效角色参与计算。
-
-第一阶段统计口径与当前 Customer List 的**普通客户列表**一致：
-
-```sql
-c.deleted = 0
-AND c.owner_id IS NOT NULL
-AND <由后端实施的 ALL / DEPT / SELF 条件>
-```
-
-因此默认排除公海客户；“无权查看公海”应明确拒绝，不得以 0 伪装权限不足。禁止模型参数传入 `userId`、`departmentId`、`role`、`dataScope` 或 SQL。
-
-Controller 从 Spring Security 可信主体获取身份。Tool 不依赖在执行线程重新读取 `SecurityContextHolder`；使用请求级不可变上下文或等效安全机制，避免异步上下文丢失及单例 Tool 并发串号。
-
-## 6. 时间与统计口径
-
-- 业务时区：`Asia/Shanghai`（目标约定，实施时核实配置）。
-- `referenceTime`：由后端可注入 `Clock` 在每次请求开始时确定一次；普通用户和 LLM 不可指定可信时钟。
-- 本月：当月 1 日 00:00 至下月 1 日 00:00。
-- 上月：上月 1 日 00:00 至当月 1 日 00:00。
-- 最近 30 天：`referenceTime` 向前滚动 30×24 小时至 `referenceTime`。
-- 未指定时间：不增加创建时间筛选。
-- 实际过滤字段：`customer.created_at`，SQL 区间统一 `[startInclusive, endExclusive)`。
-- 客户等级分布包括 A/B/C/D 及 NULL（未评级）。
-- 模拟数据 `agent_reference_answers.json` 可辅助固定数据回归，但不得把模拟批次 300 条当作全库或授权范围总量。
-
-## 7. 前端与响应契约
-
-保留现有后台 Layout，正式页面采用已确认的 AI 销售分析助手原型：左侧“新建分析 / 最近分析”区域，右侧欢迎区或消息列表，底部输入框。参考项目内 UI 原型图片；不要重新设计为普通聊天页面。
-
-第一阶段最近分析为空状态，不伪造历史会话；快捷问题仅展示已实现的客户总量、等级分布、简单时间筛选。现有 `/admin/analytics/ai` 作为正式路由候选；审查并处理重复占位路由 `/admin/ai-analysis`。前端菜单与路由检查 `ai:analysis`，后端独立鉴权。
-
-成功响应直接返回 VO，沿用项目既有模式；异常使用 RFC 7807 `ProblemDetail`：
+第一次模型响应严格为JSON对象：
 
 ```json
 {
-  "requestId": "example-request-id",
-  "answer": "当前可访问的普通客户共 120 个。",
-  "metrics": [
-    { "key": "customer_total", "label": "客户总数", "value": 120 }
-  ],
-  "analysisContext": {
-    "dataScope": "DEPT",
-    "scopeLabel": "本部门",
-    "referenceTime": "2026-10-08T16:00:00+08:00"
-  }
+  "intent": "CUSTOMER_TOTAL",
+  "timeRange": "ALL",
+  "queryScopeIntent": "ALL"
 }
 ```
 
-**示例数值仅用于说明结构，不代表真实查询结果。** 实际时间筛选时可增加 `timeRange`。`metrics` 必须来自后端工具结果，不能从模型文本解析或接受模型自行生成。第一阶段不返回 `toolCalls`、`charts`、`conversationId`。
+| 字段 | 允许值 | 含义 |
+|---|---|---|
+| intent | CUSTOMER_TOTAL、CUSTOMER_GRADE_DISTRIBUTION、UNSUPPORTED | 统计需求，UNSUPPORTED为拒绝标记 |
+| timeRange | ALL、CURRENT_MONTH、LAST_MONTH、RECENT_30_DAYS | 创建时间窗口；未指定时间默认ALL |
+| queryScopeIntent | CURRENT_AUTHORIZED、SELF、DEPT、ALL、UNSUPPORTED | 用户要求的组织范围，绝非实际授权 |
 
-## 8. 模型接入与安全约束
+字段必须恰好三个且均为字符串，拒绝额外字段、非法枚举、重复JSON键和尾随内容。不从模型自然语言文本反向解析统计数字。
 
-- 模型服务商：阿里云百炼；模型：Qwen-Plus 初选。
-- 采用百炼 OpenAI 兼容 API + Spring AI 的对应模型接入能力；正式编码前验证 endpoint、模型 ID、鉴权及 Tool Calling 行为。
-- API Key 从环境变量或安全配置注入，禁止硬编码、提交仓库或写入日志。
-- 提交给模型的工具结果应以聚合统计为主，避免发送客户姓名、联系方式、地址等个人或商业敏感明细。
-- 模型输入视为不可信，限制工具、参数、执行次数及时间范围；工具端实施权限和参数校验。
-- 记录 requestId、工具名称、执行状态、耗时、错误码和脱敏范围信息；不记录密钥、完整客户明细或无必要的敏感提示词。
-- 对无工具调用、越权、空数据、模型超时及工具异常提供明确结果或受控降级，不得虚构统计数据。
+queryScopeIntent=ALL表示全公司；timeRange=ALL只表示全部时间。本人/我的客户识别为SELF，本部门/我们部门为DEPT，当前可查看或未指定组织范围为CURRENT_AUTHORIZED，其他指定人员/部门为UNSUPPORTED。自称管理员不能改变可信权限，仍须识别文本中要求的全公司范围。
 
-## 9. 开发阶段与提交边界
+| 请求范围 | 实际有效范围 | 处理 |
+|---|---|---|
+| CURRENT_AUTHORIZED | ALL / DEPT / SELF | 使用实际范围 |
+| SELF | SELF | 允许 |
+| DEPT | DEPT | 允许 |
+| ALL | ALL | 允许 |
+| SELF / DEPT / ALL | 与请求不一致 | 422拒绝 |
+| UNSUPPORTED | 任意 | 422拒绝 |
 
-**任务 A：升级 Spring Boot**
+范围由现有DataScopeResolver读取真实有效角色/权限关系，优先级ALL > DEPT > SELF，仅授予customer:list的有效角色参与；DEPT缺部门或无可用范围拒绝。没有硬编码角色或根据模型dataScope授权。前置解析只查权限元数据，不提前调用S1统计；S1仍按既有规则强制过滤。若两次解析期间范围变化导致S1返回范围不同，拒绝成功响应，当前最多一次聚合统计不变。
 
-1. 单独检查 Boot 3.3.5 -> 3.5.16 的 Maven 依赖兼容性。
-2. 只做必要的版本升级及兼容性修复。
-3. 回归登录/JWT、`/auth/me`、RBAC、ALL/DEPT/SELF、用户/角色、客户列表和创建、异常处理、MyBatis 查询。
-4. 测试通过后独立提交，建议：`chore(backend): upgrade Spring Boot to 3.5.16`。
+ALL用户要求本人或本部门也拒绝，因为S1没有主动缩小组织范围能力。不能把范围优先级当作查询范围选择器。
 
-**任务 B：引入 Spring AI 基础依赖**
+## 4. 模型与Tool编排
 
-1. 在 Boot 升级验收后引入 Spring AI 1.1.8 BOM 和模型 Starter。
-2. 配置百炼兼容 API 的模型连接，密钥仅通过环境变量传入。
-3. 独立验证模型调用和最小 Tool Calling；不要同时实现全部客户统计功能。
-4. 独立提交，建议：`build(ai): integrate Spring AI and Qwen model configuration`。
+支持且范围匹配时恰好两次模型调用：第一次分类，第二次工具选择；拒绝请求通常只有第一次。不进行模型解释调用，不将聚合结果再次发给模型。第二次仅传已校验的统计意图与时间，不携带原始用户的权限覆盖指令。
 
-**后续任务**：初始化 `ai:analysis` 权限；实现客户统计 Service/Mapper 与数据库核验；接入 Tool Calling；实现前端原型；完成端到端验收。
+复用qwenChatClient，每HTTP请求创建独立CustomerStatisticsTool。模型只能调用getCustomerStatistics，Schema保持只有timeRange；禁止userId、deptId、dataScope、role、SQL等附加字段。
 
-## 10. 验收底线
+Spring AI1.1.8调用设置 `ToolCallingChatOptions.internalToolExecutionEnabled(false)`。Java检查单一响应、单一function调用、工具名及严格参数；时间必须与分类一致，然后显式执行Tool，不开启框架自动循环。Tool自身AtomicReference执行状态继续防止重复执行，最多一次S1聚合。多调用返回409，未调用或错误工具协议返回502。
 
-- Spring Boot 升级后原 CRM 核心功能无回归。
-- Spring AI 与百炼模型能稳定完成工具调用。
-- ALL/DEPT/SELF 统计严格遵守现有 `DataScopeResolver`。
-- 客户总量、等级分布、时间筛选可用 SQL 独立核验。
-- 权限不足返回拒绝，不得返回其他角色或公海客户数据。
-- `metrics` 与实际工具查询一致，模型失败不产生伪造结果。
-- 不执行未经明确授权的数据库写入、依赖升级或 Git 提交。
+## 5. S1口径、回答与VO
 
-## 11. 相关项目文档
+统计调用唯一来源为 `CustomerStatisticsService.getStatistics(authenticatedUserId, timeRange)`。复用现有可见性SQL，排除deleted和owner_id为空的公海；不修改统计口径、角色优先级或RBAC矩阵。
 
-- `docs/ai-agent/AI_AGENT_V1_REQUIREMENTS.md`：业务需求、权限矩阵、前端原型及响应契约。
-- `docs/ai-agent/AI_AGENT_V1_DATA_DESIGN.md`：模拟业务数据及统计参考。
-- `docs/customer-management/CUSTOMER_V1_RULES.md`：Customer List 业务与数据范围规则。
-- `docs/CODEX_CONTEXT.md`、`AGENTS.md`：项目上下文与 Codex 工作约束。
+业务时区Asia/Shanghai，Clock由S1注入；referenceTime在实际统计阶段确定。时间过滤customer.created_at，左闭右开：本月从1日00:00至下月1日，上月从上月1日至本月1日，近30天从referenceTime减30天至referenceTime，ALL不加时间条件。
 
-如文档与实际代码存在差异，先核查并更新设计基线，不得静默改变权限或统计口径。
+AiAnalysisVO包含：
+
+- answer：Java字符串，明确“本人范围内”“本部门范围内”或“全公司范围内”；ALL时间称全部时间客户，其他创建窗口称新增客户。
+- intent：CustomerAnalysisIntent两种枚举之一。
+- metrics：对象，totalCustomers、levelA、levelB、levelC、levelD、unrated均为long。
+- analysisContext：dataScope字符串、timeRange枚举、startTime/endTime/referenceTime为ZonedDateTime、timezone字符串；全部来源于实际S1。ALL时间下startTime/endTime为null。
+
+不暴露用户ID、SQL、内部Prompt、Key、requestId、scopeLabel、toolCalls、charts或conversationId。成功JSON及HTTP错误契约见[需求文档](AI_AGENT_V1_REQUIREMENTS.md)。
+
+## 6. 配置、超时与错误
+
+AI默认关闭，仅ai profile配置模型：DASHSCOPE_API_KEY从环境注入，base-url为 `https://dashscope.aliyuncs.com/compatible-mode`，completions-path为 `/v1/chat/completions`。不在启动阶段调用模型。
+
+AI profile的Boot RestClientCustomizer使用JDK HttpClient，连接超时5秒、读取超时20秒；Spring AI retry.max-attempts=1，禁止失败重试。最多两次请求，不无限循环。Customizer对该profile下Boot管理的RestClient Builder生效，未来其他消费者需评估这个超时配置。
+
+| HTTP | code | 原因 |
+|---|---|---|
+| 400 | AI_REQUEST_INVALID | 请求格式/Validation |
+| 400 | AI_TOOL_ARGUMENT_INVALID | 非法Tool参数或时间不一致 |
+| 401 | UNAUTHORIZED / AI_AUTHENTICATION_REQUIRED | 安全入口未认证 / 可信主体无效 |
+| 403 | FORBIDDEN / DATA_SCOPE_CONFIGURATION_ERROR | 双权限缺失 / 有效范围异常 |
+| 409 | AI_TOOL_REPEATED | 重复调用 |
+| 422 | AI_ANALYSIS_UNSUPPORTED | 不支持意图或范围无法精确匹配 |
+| 502 | AI_MODEL_RESPONSE_INVALID | 分类、调用协议或可信结果上下文不一致 |
+| 503 | AI_MODEL_UNAVAILABLE / AI_ANALYSIS_NOT_READY | 模型异常/超时 / 未启用客户端 |
+| 500 | AI_STATISTICS_FAILED / AI_ANALYSIS_FAILED | 聚合异常 / 其他服务异常 |
+
+错误为RFC7807 ProblemDetail，仅返回安全说明；模型异常不外露底层详情。AiAnalysisRequest.toString脱敏，AI及HTTP客户端日志保持安全级别，不打印密钥、JWT、完整Prompt或客户敏感数据。requestId、耗时追踪等为未来规划，不描述为当前能力。
+
+## 7. 验证现状与执行方法
+
+常规测试Mock ChatModel，真实ChatClient组装/解析；覆盖范围矩阵、协议白名单、权限拒绝、统计前拒绝、上下文变化、独立Tool及结果隔离。使用S1/DataScopeResolver相关测试保证安全边界，不运行全量回归。
+
+本次定向Mock及直接相关回归共92项，0失败、0错误；包含并发用户请求隔离。执行命令：
+
+```powershell
+mvn -o -f backend/pom.xml '-Dtest=AiAnalysisServiceTest,AiAnalysisControllerTest,CustomerStatisticsToolTest,CustomerStatisticsServiceImplTest,DataScopeResolverTest' test
+```
+
+2026-10-14收尾修复前已有11场景真实qwen-plus合成数据冒烟验证；旧C1虽未越权，但把全公司需求变成SELF成功回答。本次增加queryScopeIntent并在Tool前严格匹配，单次真实C1返回CUSTOMER_TOTAL / timeRange=ALL / queryScopeIntent=ALL，后端可信SELF，统计前422拒绝；只有1次模型阶段、0次Tool、0次S1。未重复运行全部11个真实场景。
+
+真实测试需要显式开关及已有环境Key，统计服务和范围解析均使用Mock，不连接数据库：
+
+```powershell
+$env:RUN_QWEN_ANALYSIS_INTEGRATION = 'true'
+mvn -o -f backend/pom.xml '-Dtest=QwenAnalysisLiveIntegrationTest#shouldRejectC1BeforeStatistics' '-Dlogging.level.root=ERROR' '-Dlogging.level.org.springframework.ai=OFF' '-Dlogging.level.org.springframework.web=OFF' test
+```
+
+这里只是单次真实结果，不能证明所有同义表达都稳定正确。后续更多语言表达仍需定向验证；模型误分类为CURRENT_AUTHORIZED仍有语义风险，Java可信权限保护不能代替分类准确性验收。无网络或无Key时报告未执行，不拿Mock结果代替真实通过。
+
+## 8. S3规划与相关文档
+
+S3只按已确认UI原型接入：后台Layout、左侧新建/最近分析空态、右侧欢迎/消息、底部输入；快捷问题需与用户有效范围匹配，优先“当前可查看范围”。前端显示真实dataScope和时间，处理422/502/503、401/403及零值状态。AI前端、SSE、图表、历史持久化、多轮记忆均未在本次实现。
+
+- [需求与API契约](AI_AGENT_V1_REQUIREMENTS.md)
+- [合成数据设计](AI_AGENT_V1_DATA_DESIGN.md)
+- [客户业务规则](../customer-management/CUSTOMER_V1_RULES.md)
+- [后端规范](../development/BACKEND_CONVENTIONS.md)
+
+代码与自动化测试优先于文档；后续范围缩小能力须单独设计，不修改当前S1来绕过语义校验。

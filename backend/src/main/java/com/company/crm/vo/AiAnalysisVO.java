@@ -20,7 +20,13 @@ public record AiAnalysisVO(String answer, CustomerAnalysisIntent intent,
             case LAST_MONTH -> "上月新增客户";
             case RECENT_30_DAYS -> "近30天新增客户";
         };
-        String answer = period + "共 " + result.totalCustomers() + " 个";
+        String scope = switch (result.dataScope()) {
+            case "SELF" -> "本人范围内，";
+            case "DEPT" -> "本部门范围内，";
+            case "ALL" -> "全公司范围内，";
+            default -> throw new com.company.crm.exception.AiAnalysisProtocolException();
+        };
+        String answer = scope + period + "共 " + result.totalCustomers() + " 个";
         if (intent == CustomerAnalysisIntent.CUSTOMER_GRADE_DISTRIBUTION) {
             answer += "，其中 A 级 " + result.levelA() + " 个、B 级 " + result.levelB()
                     + " 个、C 级 " + result.levelC() + " 个、D 级 " + result.levelD()

@@ -1,7 +1,7 @@
 # CRM AI Sales Analysis Agent V1 — 第一阶段需求与接口契约基线
 
-- 状态：需求基线（待技术选型及代码审查）
-- 日期：2026-10-08
+- 状态：S1/S2 后端已实现；S3 前端与端到端验收待开发
+- 更新日期：2026-10-14
 - 建议项目路径：`docs/ai-agent/AI_AGENT_V1_REQUIREMENTS.md`
 - 范围：第一阶段最小闭环；不代表整个 V1 的所有能力已实现
 
@@ -9,7 +9,7 @@
 
 现有 CRM 采用 Java 17、Spring Boot 3、Spring Security、JWT、MyBatis-Plus、MySQL 8，以及 Vue3、TypeScript、Vite、Element Plus、Pinia。系统已有客户列表查询、RBAC、部门及数据范围控制，模拟业务数据已导入并验收。
 
-第一阶段建设一个**只读、可验证、受权限约束**的 AI 销售分析助手：自然语言提问 → LLM Tool Calling → Java 受控统计工具 → MySQL + 数据权限 → 结构化指标 → LLM 解释 → 前端展示。
+已实现只读后端：自然语言提问 → Qwen结构化分类 → Java查询范围校验 → Qwen Tool Calling → Java受控统计工具 → S1/MySQL数据权限统计 → Java确定性回答 → AiAnalysisVO。前端展示为S3规划，关键统计数字不由LLM解释或改写。
 
 验收核心：真实工具调用、正确的数据隔离、与 SQL 基准结果一致。合成演示数据不得表述为真实市场规律。
 
@@ -17,19 +17,19 @@
 
 ### 2.1 三层权限
 
-1. **入口权限**：建议新增 `ai:analysis`，控制进入 AI 智能分析页面与调用 Agent 接口。
+1. **入口权限**：已实现 `ai:analysis`，正式接口还必须同时具有 `customer:list`。前端入口控制为S3规划。
 2. **业务工具权限**：第一阶段客户统计工具要求 `customer:list`；仅有 `ai:analysis` 不意味着可以查询客户统计。
 3. **数据范围**：复用现有 Customer List 已实现的有效数据范围逻辑；不能由 LLM 或前端决定。
 
 ### 2.2 数据范围计算
 
 - 只考虑当前用户**已启用且实际授予 `customer:list`** 的有效角色。
-- `SUPER_ADMIN` / `SYSTEM_ADMIN`：ALL；`SALES_MANAGER`：DEPT；`SALES_STAFF`：SELF。
+- 常规角色配置为 `SUPER_ADMIN` / `SYSTEM_ADMIN`：ALL，`SALES_MANAGER`：DEPT，`SALES_STAFF`：SELF；实际以 `DataScopeResolver` 查询有效角色所授范围为准，不能依赖模型自称或硬编码角色名判断。
 - 多角色取最大有效范围：ALL > DEPT > SELF；不支持用户主动切换角色来改变授权范围。
 - DEPT 仅包含当前部门，不自动包含子部门；DEPT 用户缺少部门时明确拒绝访问。
 - SELF 仅包含 `customer.owner_id = 当前登录用户ID`；不包含 `owner_id IS NULL` 的公海客户。
 - ALL 是只读分析可见范围，不赋予客户编辑、认领或新增跟进权限。
-- 用户指定人员、部门或时间条件只能缩小已授权范围，不能扩大权限。
+- 时间条件可筛选创建窗口；V1不支持主动缩小组织范围或查询指定其他人员/部门。显式要求本人、本部门、全公司时必须与当前有效范围完全一致，不能静默转换。
 - 所有聚合统计同样受数据权限限制；不因只返回总数就放开授权。
 
 ### 2.3 公海及越权处理
@@ -42,22 +42,41 @@
 
 ## 3. 第一阶段功能范围
 
-### 3.1 必须支持
+### 3.1 已实现后端能力
 
 1. **客户总量**：统计当前可访问的普通客户总数。
-2. **客户等级分布**：按 A/B/C/D/未评级分组，返回数量；必要时由 Java 计算占比。
-3. **简单时间筛选**：基于客户创建时间，支持无时间条件、本月、上月、最近 30 天等有限表达；明确区分存量客户总量与指定期间新增客户数。
+2. **客户等级分布**：按 A/B/C/D/未评级返回数量，不额外计算占比。
+3. **时间筛选**：`ALL`、`CURRENT_MONTH`、`LAST_MONTH`、`RECENT_30_DAYS`。未指定时间默认ALL，ALL仅表示全部时间，不表示全公司。
 
-三项能力必须完成：LLM 选择工具、参数校验、后端权限过滤、数据库查询、结构化结果、回答生成和 SQL 标准答案核验。
+正式入口为 `POST /api/ai/analysis`，统计意图为 `CUSTOMER_TOTAL` 或 `CUSTOMER_GRADE_DISTRIBUTION`；统计口径复用S1。真实模型测试使用合成统计Service，不构成真实MySQL独立核验。
 
-### 3.2 不在第一阶段
+### 3.2 显式查询范围与匹配
+
+第一次分类的 `queryScopeIntent` 仅表示请求语义，不能作为实际权限：
+
+| 请求表达 | queryScopeIntent | 当前V1允许条件 |
+|---|---|---|
+| 当前可查看的客户；未指定组织范围 | CURRENT_AUTHORIZED | 使用实际ALL/DEPT/SELF |
+| 我有多少客户；我的客户 | SELF | 实际SELF |
+| 我们部门；本部门 | DEPT | 实际DEPT |
+| 全公司 | ALL | 实际ALL |
+| 其他指定人员/部门或不支持范围 | UNSUPPORTED | 拒绝 |
+
+指定范围与实际范围不一致返回422 `AI_ANALYSIS_UNSUPPORTED`，在创建Tool及S1聚合查询前拒绝。ALL用户查询本人或本部门也拒绝：当前S1按有效范围统计，没有主动缩小能力。范围由后端解析，不能从模型输出的dataScope、用户自称管理员或Tool参数中取得。
+
+S1执行时仍自行强制校验数据权限；若其返回范围与前置解析不同，不返回成功结果。回答明确本人、本部门或全公司实际范围，analysisContext始终来源于实际S1结果。
+
+### 3.3 不在第一阶段
 
 - 部门对比、销售人员排名、客户跟进风险（后续阶段）。
 - 图表渲染、复杂多维交叉分析、RAG、向量数据库、多 Agent。
 - 历史会话服务端持久化、跨设备恢复、复杂多轮记忆。
 - 任何写操作、任意 SQL 执行、直接将数据库访问权限交给 LLM。
+- 客户姓名、联系方式、地址等明细、公海专用统计、自定义日期、指定其他人员/部门、合同/销售额/商机/业绩指标及主动缩小组织范围。
 
 ## 4. 前端页面与 UI 基线
+
+以下为S3规划和已有原型基线，不代表AI分析前端已完成。快捷问题应优先使用“当前可查看范围”，避免ALL/DEPT用户的“我的客户”与实际范围不匹配。
 
 ### 4.1 菜单
 
@@ -83,72 +102,77 @@
 
 第一阶段按实际复用需要逐步拆分，不要求一次创建所有组件。
 
-## 5. 第一阶段响应契约（草案）
+## 5. 已实现 API 契约
 
-响应应采用统一 DTO；**不提前返回 `charts: null`、`toolCalls: null`、`conversationId: null`**。以下字段名为设计草案，技术选型后再冻结。
+`POST /api/ai/analysis`；请求由 Jakarta Validation 校验 question 非空、非空白、最多1000字符。身份只来自JWT认证主体，请求无需 userId 或 dataScope。
+
+```json
+{"question":"本月新增了多少客户？"}
+```
+
+成功返回200，直接返回 `AiAnalysisVO`：
 
 ```json
 {
-  "requestId": "example-request-id",
-  "answer": "当前可访问的普通客户共120个，其中A级客户25个。",
-  "metrics": [
-    { "key": "customer_total", "label": "客户总数", "value": 120, "unit": "个" },
-    { "key": "level_a_count", "label": "A级客户数", "value": 25, "unit": "个" }
-  ],
+  "answer": "本人范围内，本月新增客户共 48 个。",
+  "intent": "CUSTOMER_TOTAL",
+  "metrics": {
+    "totalCustomers": 48,
+    "levelA": 10,
+    "levelB": 15,
+    "levelC": 12,
+    "levelD": 8,
+    "unrated": 3
+  },
   "analysisContext": {
-    "dataScope": "DEPT",
-    "scopeLabel": "本部门负责的普通客户",
-    "referenceTime": "2026-10-08T16:00:00+08:00",
-    "timeRange": null
+    "dataScope": "SELF",
+    "timeRange": "CURRENT_MONTH",
+    "startTime": "2026-10-01T00:00:00+08:00",
+    "endTime": "2026-11-01T00:00:00+08:00",
+    "referenceTime": "2026-10-14T12:00:00+08:00",
+    "timezone": "Asia/Shanghai"
   }
 }
 ```
 
-上述数字是**契约示例**，不是数据库结果。`timeRange` 可按需省略而非强制传 null。
+数字仅为结构示例。metrics为对象，六个值为Java long；intent为两个允许统计枚举之一。analysisContext的dataScope是实际执行范围，timeRange是时间枚举；时间字段为ZonedDateTime，按项目Jackson配置输出带偏移的ISO时间字符串。ALL时间下startTime/endTime为null，referenceTime和timezone仍返回。不返回requestId、scopeLabel、toolCalls、charts或conversationId。
 
-- `answer`：面向用户的自然语言解释；不得编造未经工具验证的统计数值。
-- `metrics`：由 Java 根据受控工具查询结果构造；不能从 LLM 文本反向抽取；允许空数组（无可提供指标时）。
-- `analysisContext.dataScope`：后端计算的有效授权上限（ALL/DEPT/SELF）。
-- `analysisContext.scopeLabel`：后端生成的本次统计口径说明；后续支持主动缩小范围时应区分授权上限和实际应用范围。
-- `analysisContext.referenceTime`：后端为单次请求统一确定的时间基准，使用带时区的时间表示。
-- `analysisContext.timeRange`：时间筛选时返回实际使用的起止范围，推荐 `[startInclusive, endExclusive)`。
-- `requestId`：关联服务端日志及排障。
-- `toolCalls`：第一阶段不向前端返回完整调用轨迹；服务端记录脱敏结构化日志。
+answer由Java生成，metrics及analysisContext均来自实际Tool/S1结果。零客户是合法成功数据；拒绝和失败不以零值伪装。
 
-错误、拒绝、无数据应采用一致的 API 错误/状态语义，并与项目现有响应及异常规范对齐；不应以“客户数=0”代替无权访问。
+错误沿用RFC 7807 ProblemDetail，含稳定code：
+
+| HTTP | code | 含义 |
+|---|---|---|
+| 400 | AI_REQUEST_INVALID | question或请求格式非法 |
+| 400 | AI_TOOL_ARGUMENT_INVALID | Tool参数非法或与分类时间不一致 |
+| 401 | UNAUTHORIZED / AI_AUTHENTICATION_REQUIRED | 安全入口未认证 / 缺失可信主体 |
+| 403 | FORBIDDEN | 缺少任一功能权限 |
+| 403 | DATA_SCOPE_CONFIGURATION_ERROR | 无有效范围或DEPT缺部门 |
+| 409 | AI_TOOL_REPEATED | 重复工具调用 |
+| 422 | AI_ANALYSIS_UNSUPPORTED | 不支持需求或无法匹配指定查询范围 |
+| 502 | AI_MODEL_RESPONSE_INVALID | 模型分类、工具协议或结果上下文校验失败 |
+| 503 | AI_MODEL_UNAVAILABLE | 模型调用异常或超时 |
+| 503 | AI_ANALYSIS_NOT_READY | 未启用AI profile，模型客户端不可用 |
+| 500 | AI_STATISTICS_FAILED / AI_ANALYSIS_FAILED | S1聚合错误 / 其他安全封装的服务错误 |
 
 ## 6. 时间与统计口径
 
-- 请求时间基准由后端统一生成；LLM 可以把“本月 / 上月 / 最近30天”转换为受控工具参数，但 Java 必须校验日期范围、时区、起止顺序和最大查询跨度。
-- 时间范围采用左闭右开，避免日期边界问题；“最近30天”定义为相对基准时刻的滚动30×24小时还是自然日，需要在实现前明确并写入测试。
-- 支持后端配置的**真实当前时间模式**与**固定测试时间模式**；普通用户不得通过提示词改变系统时间基准。
-- 统计必须区分本批300个合成客户、全库客户、当前授权客户、普通客户与公海客户。
-- 第一阶段以客户创建时间为时间筛选依据，不混用跟进时间。
+- 时区Asia/Shanghai，referenceTime由S1通过可注入Clock在统计时确定；测试可提供固定Clock，用户和模型不能指定它。
+- CURRENT_MONTH：本月1日00:00至下月1日00:00；LAST_MONTH：上月1日00:00至本月1日00:00。
+- RECENT_30_DAYS：referenceTime减30天至referenceTime；业务时区下为滚动30×24小时。
+- ALL无创建时间筛选；其余按customer.created_at左闭右开过滤，不混用跟进时间。
+- 普通客户排除deleted及owner_id为空的公海，与现有Customer List口径一致；不得把某批合成数据当作真实全库总量。
 
-## 7. 后端架构原则
+## 7. 已实现后端架构
 
-- 单独建设 AI 分析服务（可暂称 `AiAnalysisService`），**复用现有 Customer List 的数据权限计算能力**，不直接复用分页列表接口来做聚合。
-- 如果当前权限逻辑散落在 Customer Service/Mapper，应先评估最小范围抽取复用，不复制一套不同的 ALL/DEPT/SELF 规则。
-- Tool Calling 只允许调用明确注册的只读业务工具；工具参数使用白名单与类型校验，不接受任意 SQL、任意 dataScope 或任意身份信息。
-- 工具执行链：认证 → `ai:analysis` → `customer:list` → 有效范围 → 查询条件授权/校验 → SQL 统计 → 指标构造 → LLM 解释。
-- Spring AI 与 LangChain4j 选型、API 路径、DTO 细节、会话方案与日志实现方式留待下一轮技术架构讨论。
+HTTP → JWT/RBAC双权限 → Qwen结构化分类 → Java枚举与查询范围校验 → Qwen Tool Calling → CustomerStatisticsTool → S1 → Java回答 → AiAnalysisVO。
 
-## 8. 第一阶段验收标准
+最多两次模型调用；不支持/范围不匹配通常在第一次分类后结束。分类无业务Tool，字段严格为intent、timeRange、queryScopeIntent，不接受模型提供实际授权dataScope。唯一Tool为getCustomerStatistics，Schema仅timeRange，每请求独立绑定可信身份；关闭框架内部工具执行，由Java先校验再最多执行一次统计。无模型解释阶段，不把统计结果再次发给模型改写。技术细节见[技术文档](AI_AGENT_V1_TECH_STACK.md)。
 
-1. **闭环**：用户通过前端输入自然语言，LLM 确实触发后端客户统计工具并返回结果，不是静态模板或模型凭空生成。
-2. **统计**：总量、等级分布、时间筛选与独立 SQL 查询一致；检查零值、未评级、时间边界、无数据。
-3. **权限**：ALL/DEPT/SELF、多角色优先级、无 `customer:list`、无 `ai:analysis`、DEPT 缺部门、SELF 访问公海/跨人员均符合规则；统计查询不能绕过权限。
-4. **安全**：前端和模型不得决定最终 dataScope；不执行写操作或任意 SQL；日志不记录密钥、密码、敏感客户明细或完整原始工具负载。
-5. **体验**：按照已确认原型实现页面，快捷提问只包含已支持能力；有加载、无数据、权限拒绝、模型异常的明确状态。
-6. **可追溯**：每次请求有 requestId，服务端记录工具名、状态、耗时、实际数据范围和错误码；与现有 `agent_reference_answers.json` 及独立 SQL 核验，但应先核对其统计范围和固定时间口径是否与本阶段一致。
+## 8. 验收状态与后续工作
 
-## 9. 尚待技术方案阶段确认
+已实现并由定向测试覆盖：正式API、双权限、范围匹配、请求隔离、Tool白名单/次数、S1统计边界及Java结果映射。2026-10-14已有11场景真实Qwen冒烟验证（合成S1），其中旧C1暴露组织范围误解释问题；本次增加范围语义协议和执行前校验，单次C1回归结果见技术文档。
 
-- Spring AI 或 LangChain4j 及 LLM 提供商。
-- 现有 Customer List 权限实现如何抽取为统一可复用能力。
-- 具体工具函数拆分、工具参数 DTO、返回 DTO、异常码及 API 路径。
-- 默认客户统计是否与普通客户列表完全同口径，以及客户创建时间字段的实际定义。
-- 业务时区、最近30天边界定义、固定测试时间配置。
-- 前端原型图片在仓库中的保存位置。
+S3待开发：按现有原型接入前端、明确展示实际范围、加载/零数据/拒绝/失败状态和端到端验收。AI前端、历史会话、跨轮记忆、图表、requestId关联与耗时追踪均不能描述为已完成。真实MySQL独立核验需使用明确授权的验证环境，不以模型合成数据冒烟代替。
 
-> 本文用于约束 Codex 的后续实现；技术方案或数据库结构以实际仓库代码审查为准，不得把尚未实现的功能写成已完成。
+模型自然语言分类存在不确定性；Java校验只信任后端权限，但仍需后续覆盖更多同义范围表达。当前不支持主动缩小组织范围；需要该能力时另行设计，不修改当前S1或权限矩阵。
