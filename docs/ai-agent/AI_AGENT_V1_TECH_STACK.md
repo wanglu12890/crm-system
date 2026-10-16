@@ -1,6 +1,6 @@
 # CRM AI Agent V1 技术栈与架构基线
 
-更新：2026-10-14。状态：S1/S2后端已实现，查询范围语义修复及单次C1真实回归通过；S3前端与端到端验收待开发。
+更新：2026-10-14。状态：S1、S2-A/S2-B、C1、S3-A已完成；S3-B核心真实联调通过。阶段性验收PARTIAL，SYSTEM_ADMIN范围配置收尾及缺权限真实账号验收待补充。
 
 ## 1. 技术栈与边界
 
@@ -12,7 +12,7 @@
 | 认证与授权 | Spring Security、JWT、方法级双权限 |
 | 数据查询 | MyBatis-Plus3.5.7、现有CustomerMapper、MySQL8 |
 | 测试 | JUnit5、Mockito、AssertJ、MockMvc |
-| 前端 | 现有Vue3/TypeScript，AI页面为S3规划 |
+| 前端 | Vue3/TypeScript，AI页面已接入正式接口，双权限菜单/路由 |
 
 沿用Java单体，不引入LangChain4j、Python服务、通用Agent框架、RAG、向量库或多Agent。V1仅提供客户总量、A/B/C/D/未评级分布和四种创建时间窗口；无任意SQL、业务写操作、自定义日期、明细、公海统计、其他人员/部门、合同/商机/销售额或主动缩小组织范围。
 
@@ -136,9 +136,15 @@ mvn -o -f backend/pom.xml '-Dtest=QwenAnalysisLiveIntegrationTest#shouldRejectC1
 
 这里只是单次真实结果，不能证明所有同义表达都稳定正确。后续更多语言表达仍需定向验证；模型误分类为CURRENT_AUTHORIZED仍有语义风险，Java可信权限保护不能代替分类准确性验收。无网络或无Key时报告未执行，不拿Mock结果代替真实通过。
 
-## 8. S3规划与相关文档
+## 8. S3实现、阶段性验收与相关文档
 
-S3只按已确认UI原型接入：后台Layout、左侧新建/最近分析空态、右侧欢迎/消息、底部输入；快捷问题需与用户有效范围匹配，优先“当前可查看范围”。前端显示真实dataScope和时间，处理422/502/503、401/403及零值状态。AI前端、SSE、图表、历史持久化、多轮记忆均未在本次实现。
+S3-A已按确认原型接入：后台Layout、左侧新建/临时会话/空态、右侧欢迎或消息、底部输入。使用共享Axios `/ai/analysis`，仅该接口60秒超时；直接读取VO，双权限限制正式和旧路由；记录只在页面内存保留，不发送历史、身份或范围参数。前端显示实际dataScope、时间、后端answer，等级条仅按原始数量计算可视比例，支持复制、错误草稿保留和零值成功。SSE、图表库、历史持久化、多轮记忆仍未实现。
+
+S3-B真实环境验收记录：9项成功统计全部与独立MySQL分组SQL一致，覆盖ALL/DEPT/SELF及全部时间、本月、近30天和上月；15项Edge浏览器核心检查通过，包含实际复制、会话切换、窄屏、零值和401/422/503。成功请求约1.8–2.3秒。前端构建、5项离线前端测试、63项后端Service/Controller定向测试通过；没有把合成模型冒烟代替真实数据库验收。
+
+阶段结论PARTIAL。SYSTEM_ADMIN现有记录data_scope=SELF，与初始化SQL和客户规则中的ALL设计不符；sys_admin仅绑定该角色，因此可信解析和正式API都为SELF。初始化使用WHERE NOT EXISTS，不覆盖已有角色，表默认值及普通角色创建路径均为SELF；可确认配置漂移的技术原因，不能据此断言历史修改者或SELF配置意图。只读检查发现该角色有18项有效权限、5个有效用户，恢复ALL会扩大这5人的客户可见范围。SQL方案待确认，未改Java、RBAC或数据库。
+
+获准修复后只定向核验sys_admin实际ALL、客户列表、一次AI统计与独立SQL对账，以及sales_manager01仍DEPT、sales_staff03仍SELF，不重跑全部真实场景。当前缺权限真实账号403/菜单验收仍待补充，已通过的Mock/离线测试不能替代；真实模型故障注入和剪贴板权限拒绝仍未执行。
 
 - [需求与API契约](AI_AGENT_V1_REQUIREMENTS.md)
 - [合成数据设计](AI_AGENT_V1_DATA_DESIGN.md)

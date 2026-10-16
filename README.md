@@ -125,7 +125,24 @@ cd backend
 mvn clean install
 mvn spring-boot:run "-Dspring-boot.run.arguments=--spring.config.additional-location=optional:file:./src/main/resources/"
 ```
-启动命令：mvn -s .mvn/settings.xml spring-boot:run "-Dspring-boot.run.arguments=--spring.profiles.active=local --spring.config.additional-location=file:./src/main/resources/"
+上述启动方式仅启用默认local，不提供AI分析。正常本地AI开发请在项目根目录运行：
+
+```powershell
+.\scripts\start-local-ai.ps1
+# 本机依赖已缓存时，可使用 .\scripts\start-local-ai.ps1 -Offline
+# 若本机脚本策略限制执行，仅为这个子进程放行，不修改系统策略：
+# powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/start-local-ai.ps1 -Offline
+```
+
+脚本显式启用local,ai，在8080启动，加载已有本机application-local.yml并关闭管理员初始化。DASHSCOPE_API_KEY必须已在启动终端环境中设置，脚本不保存或输出其值。若使用VS Code，可选择运行配置“CRM Backend — Local AI (8080)”；环境变量设置后需重启终端或IDE，旧Java进程不会自动继承新增变量。
+
+也可在backend目录显式启动：
+
+```powershell
+mvn spring-boot:run '-Dspring-boot.run.profiles=local,ai' '-Dspring-boot.run.arguments=--server.port=8080 --spring.config.additional-location=file:./src/main/resources/application-local.yml --crm.init.admin.enabled=false'
+```
+
+无需修改所有部署环境的默认profile；未启用ai时正式AI接口仍返回受控503 AI_ANALYSIS_NOT_READY。启用/切换profile需要重启后端，不需改前端代理或重启已运行的前端。
 
 后端默认地址为 `http://localhost:8080/api`。数据库必须已初始化且连接变量有效。`application-local.yml` 仅作为本机外部配置使用，不会进入 Maven 构建产物；上述参数显式将其所在目录加入 Spring Boot 外部配置搜索路径。
 

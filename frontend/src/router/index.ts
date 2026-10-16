@@ -6,6 +6,7 @@
 import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { getAccessToken, removeAuthToken } from '@/utils/auth'
+import { AI_ANALYSIS_PERMISSIONS } from '@/utils/aiAnalysis'
 
 // 路由配置
 const routes: RouteRecordRaw[] = [
@@ -73,6 +74,16 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '客户列表', permission: 'customer:list' }
       },
       // ……使用 map 方法动态生成路由记录，减少重复代码，提高可维护性
+      {
+        path: 'analytics/ai',
+        name: 'AiIntelligence',
+        component: () => import('@/views/analysis/AiAnalysis.vue'),
+        meta: { title: 'AI智能分析', permissions: [...AI_ANALYSIS_PERMISSIONS] }
+      },
+      {
+        path: 'ai-analysis',
+        redirect: '/admin/analytics/ai'
+      },
       // map 方法遍历一个包含路径、名称和标题的数组，生成对应的路由记录对象。
       // map 方法返回一个新的数组，包含每个子路由的路径、名称、组件和元信息。
       // 组件使用占位组件 Placeholder.vue，实际开发中可以替换为具体的页面组件。
@@ -86,9 +97,7 @@ const routes: RouteRecordRaw[] = [
         ['analytics/report', 'SalesReport', '销售报表'],
         ['analytics/customer-analysis', 'CustomerAnalysis', '客户分析'],
         ['analytics/performance-analysis', 'PerformanceAnalysis', '业绩分析'],
-        ['analytics/ai', 'AiIntelligence', 'AI智能分析'],
-        ['analytics', 'Analytics', '数据分析'],
-        ['ai-analysis', 'AiAnalysis', 'AI分析']
+        ['analytics', 'Analytics', '数据分析']
       ].map(([path, name, title]) => ({
         path,
         name,
@@ -157,8 +166,10 @@ router.beforeEach(async (to) => {
   const hasRequiredRole = !to.meta.role || authStore.hasRole(to.meta.role)  // 判断目标路由是否有角色要求，如果没有要求，则直接放行；如果有要求，则检查当前用户是否具有该角色
   const hasRequiredPermission =
     !to.meta.permission || authStore.hasPermission(to.meta.permission)  // 判断目标路由是否有权限要求，如果没有要求，则直接放行；如果有要求，则检查当前用户是否具有该权限
+  const hasRequiredPermissions = to.matched.every(record =>
+    !record.meta.permissions || record.meta.permissions.every(authStore.hasPermission))
 
-  if (!hasRequiredRole || !hasRequiredPermission) {  // 如果当前用户不具有目标路由所需的角色或权限，则重定向到 403 页面，并携带原始请求路径作为查询参数，以便在 403 页面中显示提示信息或提供返回功能
+  if (!hasRequiredRole || !hasRequiredPermission || !hasRequiredPermissions) {  // 如果当前用户不具有目标路由所需的角色或权限，则重定向到 403 页面，并携带原始请求路径作为查询参数，以便在 403 页面中显示提示信息或提供返回功能
     return to.path === '/403'
       ? true
       : { path: '/403', query: { redirect: to.fullPath } }

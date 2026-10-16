@@ -2,6 +2,7 @@
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import { AI_ANALYSIS_PERMISSIONS } from '@/utils/aiAnalysis'
 
 interface MenuItem {
   title: string
@@ -34,6 +35,7 @@ const visibleSystemMenuItems = computed(() =>
 )
 
 const canViewCustomerList = computed(() => authStore.hasPermission('customer:list'))
+const canViewAiAnalysis = computed(() => AI_ANALYSIS_PERMISSIONS.every(authStore.hasPermission))
 </script>
 
 <template>
@@ -70,7 +72,7 @@ const canViewCustomerList = computed(() => authStore.hasPermission('customer:lis
         <el-menu-item index="/admin/analytics/report">销售报表</el-menu-item>
         <el-menu-item index="/admin/analytics/customer-analysis">客户分析</el-menu-item>
         <el-menu-item index="/admin/analytics/performance-analysis">业绩分析</el-menu-item>
-        <el-menu-item index="/admin/analytics/ai">AI智能分析</el-menu-item>
+        <el-menu-item v-if="canViewAiAnalysis" index="/admin/analytics/ai">AI智能分析</el-menu-item>
       </el-sub-menu>
 
       <!-- 动态渲染有权限的菜单项 -->

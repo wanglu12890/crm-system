@@ -8,6 +8,7 @@ declare module 'vue-router' {
     requiresAuth?: boolean
     role?: string
     permission?: string
+    permissions?: string[]
   }
 }
 

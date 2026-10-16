@@ -67,7 +67,8 @@ secrets/
 # IDE / 编辑器 配置
 # ==================================================
 .idea/
-.vscode/
+.vscode/*
+!.vscode/launch.json
 *.iml
 *.ipr
 *.iws
@@ -137,3 +138,8 @@ task/
 
 skills/
 test-cases/
+
+docs/resume-audit
+
+log/
+.local

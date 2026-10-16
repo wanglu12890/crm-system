@@ -13,7 +13,7 @@
 - 系统管理 V1 已具备认证、用户、角色、权限及前端权限控制。
 - 客户管理 V1 已具备客户列表、新建客户、数据范围控制和客户统计核心服务。
 - 联系人、跟进、线索、商机、合同、数据分析等仍以数据库基础或前端占位为主，不能据此假定已有完整业务 API。
-- AI Agent V1 已完成 Spring AI 与通义千问兼容基础设施，以及客户统计核心能力；尚未完成 Tool Calling 编排、正式 AI 对话 API 和 AI 分析前端闭环。
+- AI Agent V1 的S1统计、S2-A/S2-B正式接口与Tool Calling、C1范围语义校验、S3-A前端均已完成；S3-B核心真实链路与SQL对账通过，阶段性验收PARTIAL，SYSTEM_ADMIN范围配置和缺权限真实账号验收待收尾。
 
 ## 3. 当前技术基线
 
@@ -120,7 +120,7 @@ sys_user → sys_user_role → sys_role
 
 - Spring AI 1.1.8 与通义千问的 OpenAI 兼容配置已建立，生产默认不主动启用模型。
 - 已有隔离的 live smoke test，需要显式环境条件才运行。
-- 客户统计服务是后续 Tool Calling 的候选业务能力，但当前并不表示已注册为 AI Tool。
+- 正式POST /api/ai/analysis要求ai:analysis和customer:list双权限；Qwen分类后由Java校验请求范围，唯一getCustomerStatistics工具仅接受timeRange，最多一次S1统计，回答由Java生成。
 - AI 需求、数据与技术边界见 `docs/ai-agent/`；历史接入验收见 `docs/historical/`。
 
 ## 8. 关键工程约束
@@ -155,5 +155,5 @@ sys_user → sys_user_role → sys_role
 - 当前没有 Refresh Token、Token 黑名单或密码变更后的即时 Token 失效机制。
 - 权限与客户数据初始化仍依赖手工 SQL，没有数据库迁移框架。
 - 部分数据库表和前端菜单是后续模块占位，不代表对应 API 已实现。
-- AI 对话 API、Tool Calling 编排、动态工具授权和 AI 分析前端尚未完成。
+- AI V1核心真实联调通过，但现有SYSTEM_ADMIN角色实际SELF与设计ALL不符，修改需另行确认；缺权限真实账号403/菜单验收尚待补充。没有通用动态工具授权、多轮记忆或历史持久化。
 - 文档可能落后；开始具体任务时仍需检查直接相关源码和测试。

@@ -1,0 +1,33 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "type": "java",
+      "name": "CRM Backend — Local AI (8080)",
+      "request": "launch",
+      "mainClass": "com.company.crm.CrmApplication",
+      "projectName": "crm-backend",
+      "cwd": "${workspaceFolder}/backend",
+      "env": { "SPRING_PROFILES_ACTIVE": "local,ai" },
+      "args": [
+        "--server.port=8080",
+        "--spring.config.additional-location=file:${workspaceFolder}/backend/src/main/resources/application-local.yml",
+        "--crm.init.admin.enabled=false"
+      ]
+    },
+    {
+      "type": "java",
+      "name": "CRM Backend — Local without AI (8080)",
+      "request": "launch",
+      "mainClass": "com.company.crm.CrmApplication",
+      "projectName": "crm-backend",
+      "cwd": "${workspaceFolder}/backend",
+      "env": { "SPRING_PROFILES_ACTIVE": "local" },
+      "args": [
+        "--server.port=8080",
+        "--spring.config.additional-location=file:${workspaceFolder}/backend/src/main/resources/application-local.yml",
+        "--crm.init.admin.enabled=false"
+      ]
+    }
+  ]
+}
