@@ -4,11 +4,13 @@ import com.company.crm.config.TimeConfig;
 import com.company.crm.dto.statistics.CustomerStatisticsAggregate;
 import com.company.crm.dto.statistics.CustomerStatisticsResult;
 import com.company.crm.enums.StatisticsTimeRange;
+import com.company.crm.enums.CustomerQueryScopeIntent;
 import com.company.crm.exception.CustomerStatisticsDataException;
 import com.company.crm.mapper.CustomerMapper;
 import com.company.crm.security.datascope.DataScopeContext;
 import com.company.crm.security.datascope.DataScopeResolver;
 import com.company.crm.service.CustomerStatisticsService;
+import com.company.crm.service.CustomerAnalysisScopePolicy;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -27,6 +29,7 @@ public class CustomerStatisticsServiceImpl implements CustomerStatisticsService 
     private final CustomerMapper customerMapper;
     private final DataScopeResolver dataScopeResolver;
     private final Clock businessClock;
+    private final CustomerAnalysisScopePolicy scopePolicy;
 
     @Override
     @Transactional(readOnly = true)
@@ -35,6 +38,20 @@ public class CustomerStatisticsServiceImpl implements CustomerStatisticsService 
         Objects.requireNonNull(timeRange, "timeRange must not be null");
 
         DataScopeContext dataScope = dataScopeResolver.resolve(authenticatedUserId, CUSTOMER_LIST_PERMISSION);
+        return executeStatistics(dataScope, timeRange);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public CustomerStatisticsResult getStatistics(Long authenticatedUserId, StatisticsTimeRange timeRange,
+                                                  CustomerQueryScopeIntent requestedScope) {
+        Objects.requireNonNull(authenticatedUserId, "authenticatedUserId must not be null");
+        Objects.requireNonNull(timeRange, "timeRange must not be null");
+        DataScopeContext effectiveScope = scopePolicy.resolve(authenticatedUserId, requestedScope);
+        return executeStatistics(effectiveScope, timeRange);
+    }
+
+    private CustomerStatisticsResult executeStatistics(DataScopeContext dataScope, StatisticsTimeRange timeRange) {
         ZonedDateTime referenceTime = ZonedDateTime.now(businessClock)
                 .withZoneSameInstant(TimeConfig.BUSINESS_ZONE);
         TimeWindow window = resolveTimeWindow(timeRange, referenceTime);

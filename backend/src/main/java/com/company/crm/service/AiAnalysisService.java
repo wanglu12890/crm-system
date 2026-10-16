@@ -3,7 +3,6 @@ package com.company.crm.service;
 import com.company.crm.ai.tool.CustomerStatisticsToolFactory;
 import com.company.crm.enums.CustomerAnalysisIntent;
 import com.company.crm.enums.CustomerQueryScopeIntent;
-import com.company.crm.security.datascope.DataScopeResolver;
 import com.company.crm.enums.StatisticsTimeRange;
 import com.company.crm.exception.AiAnalysisNotReadyException;
 import com.company.crm.exception.AiAuthenticationContextException;
@@ -27,15 +26,15 @@ public class AiAnalysisService {
     private final CustomerStatisticsToolFactory customerStatisticsToolFactory;
     private final ObjectProvider<ChatClient> chatClientProvider;
     private final ObjectMapper objectMapper;
-    private final DataScopeResolver dataScopeResolver;
+    private final CustomerAnalysisScopePolicy scopePolicy;
 
     public AiAnalysisService(CustomerStatisticsToolFactory factory,
             @Qualifier("qwenChatClient") ObjectProvider<ChatClient> chatClientProvider, ObjectMapper objectMapper,
-            DataScopeResolver dataScopeResolver) {
+            CustomerAnalysisScopePolicy scopePolicy) {
         this.customerStatisticsToolFactory = factory;
         this.chatClientProvider = chatClientProvider;
         this.objectMapper = objectMapper;
-        this.dataScopeResolver = dataScopeResolver;
+        this.scopePolicy = scopePolicy;
     }
 
     private static final String POLICY = """
@@ -82,11 +81,9 @@ public class AiAnalysisService {
             throw new AiAnalysisProtocolException();
         }
         if (requestedScope == CustomerQueryScopeIntent.UNSUPPORTED) throw new AiUnsupportedAnalysisException();
-        String actualScope = dataScopeResolver.resolve(authenticatedUserId, "customer:list").getScopeCode();
-        if (requestedScope != CustomerQueryScopeIntent.CURRENT_AUTHORIZED && !requestedScope.name().equals(actualScope)) {
-            throw new AiUnsupportedAnalysisException();
-        }
-        var tool = customerStatisticsToolFactory.create(authenticatedUserId);
+        // The policy resolves maximum authorization internally; this is the validated execution scope.
+        String effectiveScope = scopePolicy.resolve(authenticatedUserId, requestedScope).getScopeCode();
+        var tool = customerStatisticsToolFactory.create(authenticatedUserId, requestedScope);
         ChatResponse response = modelCall(() -> client.prompt().system(POLICY
                 + "必须调用一次getCustomerStatistics获取统计结果，参数仅timeRange，禁止返回虚构统计。")
                 .user("已校验的统计意图：" + intent + "；时间范围：" + range)
@@ -105,7 +102,7 @@ public class AiAnalysisService {
         }
         // No model loop and no model rewrite: execute only after all call arguments are validated.
         var result = tool.getCustomerStatistics(range);
-        if (result.timeRange() != range || !actualScope.equals(result.dataScope())) throw new AiAnalysisProtocolException();
+        if (result.timeRange() != range || !effectiveScope.equals(result.dataScope())) throw new AiAnalysisProtocolException();
         return AiAnalysisVO.from(intent, result);
     }
 

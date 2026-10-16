@@ -2,6 +2,7 @@ package com.company.crm.ai.tool;
 
 import com.company.crm.dto.statistics.CustomerStatisticsResult;
 import com.company.crm.enums.StatisticsTimeRange;
+import com.company.crm.enums.CustomerQueryScopeIntent;
 import com.company.crm.exception.AiToolArgumentException;
 import com.company.crm.exception.AiToolInvocationException;
 import com.company.crm.service.CustomerStatisticsService;
@@ -18,11 +19,14 @@ public final class CustomerStatisticsTool {
 
     private final Long authenticatedUserId;
     private final CustomerStatisticsService customerStatisticsService;
+    private final CustomerQueryScopeIntent validatedRequestedScope;
     private final AtomicReference<ToolExecution> execution = new AtomicReference<>(NOT_EXECUTED);
 
-    CustomerStatisticsTool(Long authenticatedUserId, CustomerStatisticsService customerStatisticsService) {
+    CustomerStatisticsTool(Long authenticatedUserId, CustomerStatisticsService customerStatisticsService,
+                           CustomerQueryScopeIntent validatedRequestedScope) {
         this.authenticatedUserId = Objects.requireNonNull(authenticatedUserId, "authenticatedUserId");
         this.customerStatisticsService = Objects.requireNonNull(customerStatisticsService, "customerStatisticsService");
+        this.validatedRequestedScope = Objects.requireNonNull(validatedRequestedScope, "validatedRequestedScope");
     }
 
     @Tool(name = "getCustomerStatistics",
@@ -38,7 +42,8 @@ public final class CustomerStatisticsTool {
             if (timeRange == null) {
                 throw new AiToolArgumentException("客户统计时间范围不能为空");
             }
-            CustomerStatisticsResult result = customerStatisticsService.getStatistics(authenticatedUserId, timeRange);
+            CustomerStatisticsResult result = customerStatisticsService.getStatistics(
+                    authenticatedUserId, timeRange, validatedRequestedScope);
             if (result == null) {
                 throw new IllegalStateException("客户统计服务未返回结果");
             }

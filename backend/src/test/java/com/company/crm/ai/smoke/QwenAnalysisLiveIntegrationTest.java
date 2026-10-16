@@ -5,9 +5,12 @@ import com.company.crm.ai.tool.CustomerStatisticsToolFactory;
 import com.company.crm.dto.statistics.CustomerStatisticsResult;
 import com.company.crm.enums.CustomerAnalysisIntent;
 import com.company.crm.enums.StatisticsTimeRange;
+import com.company.crm.enums.CustomerQueryScopeIntent;
 import com.company.crm.exception.AiUnsupportedAnalysisException;
 import com.company.crm.service.AiAnalysisService;
 import com.company.crm.service.CustomerStatisticsService;
+import com.company.crm.service.CustomerAnalysisScopePolicy;
+import com.company.crm.mapper.SysUserMapper;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Assumptions;
@@ -55,6 +58,7 @@ class QwenAnalysisLiveIntegrationTest {
     @MockitoSpyBean OpenAiChatModel model;
     @Autowired ObjectMapper mapper;
     @Autowired DataScopeResolver scopes;
+    @Autowired SysUserMapper users;
     private static int consecutiveFailures;
     private final List<ChatResponse> responses = new ArrayList<>();
     private String remoteFailureType = "NONE";
@@ -76,6 +80,7 @@ class QwenAnalysisLiveIntegrationTest {
         }).when(model).call(any(Prompt.class));
         assertThat(model.getDefaultOptions().getModel()).isEqualTo("qwen-plus");
         when(scopes.resolve(7L, "customer:list")).thenReturn(new DataScopeContext(DataScopeType.SELF, 7L, null));
+        when(users.selectRoleCodesByUserId(7L)).thenReturn(List.of("SALES_STAFF"));
     }
 
     record Scenario(String id, String question, CustomerAnalysisIntent intent, StatisticsTimeRange range, String kind) {
@@ -100,7 +105,7 @@ class QwenAnalysisLiveIntegrationTest {
         Assumptions.assumeTrue(consecutiveFailures < 2, "连续失败，停止后续付费调用");
         reset(statistics);
         var time = ZonedDateTime.parse("2026-10-14T12:00:00+08:00[Asia/Shanghai]");
-        when(statistics.getStatistics(eq(7L), any(StatisticsTimeRange.class))).thenAnswer(invocation -> {
+        when(statistics.getStatistics(eq(7L), any(StatisticsTimeRange.class), any(CustomerQueryScopeIntent.class))).thenAnswer(invocation -> {
             StatisticsTimeRange range = invocation.getArgument(1);
             ZonedDateTime start = switch (range) {
                 case ALL -> null;
@@ -144,7 +149,7 @@ class QwenAnalysisLiveIntegrationTest {
             }
             if (answer != null) {
                 assertThat(executions).isEqualTo(1);
-                verify(statistics).getStatistics(7L, answer.analysisContext().timeRange());
+                verify(statistics).getStatistics(eq(7L), eq(answer.analysisContext().timeRange()), any(CustomerQueryScopeIntent.class));
                 verifyNoMoreInteractions(statistics);
                 assertThat(answer.metrics()).isEqualTo(new AiAnalysisVO.Metrics(15, 1, 2, 3, 4, 5));
                 assertThat(answer.analysisContext().dataScope()).isEqualTo("SELF");
@@ -218,13 +223,13 @@ class QwenAnalysisLiveIntegrationTest {
     @Test
     void shouldSelectRealToolAndRejectUnsupportedQuestion() {
         var time = ZonedDateTime.parse("2026-10-14T12:00:00+08:00[Asia/Shanghai]");
-        when(statistics.getStatistics(7L, StatisticsTimeRange.CURRENT_MONTH)).thenReturn(
+        when(statistics.getStatistics(7L, StatisticsTimeRange.CURRENT_MONTH, CustomerQueryScopeIntent.CURRENT_AUTHORIZED)).thenReturn(
                 new CustomerStatisticsResult(5, 1, 1, 1, 1, 1, "SELF", StatisticsTimeRange.CURRENT_MONTH,
                         time.withDayOfMonth(1), time.withDayOfMonth(1).plusMonths(1), time, "Asia/Shanghai"));
         var answer = service.analyze(7L, "本月新增了多少客户？");
         assertThat(answer.intent()).isEqualTo(CustomerAnalysisIntent.CUSTOMER_TOTAL);
         assertThat(answer.metrics().totalCustomers()).isEqualTo(5);
-        verify(statistics).getStatistics(7L, StatisticsTimeRange.CURRENT_MONTH);
+        verify(statistics).getStatistics(7L, StatisticsTimeRange.CURRENT_MONTH, CustomerQueryScopeIntent.CURRENT_AUTHORIZED);
         clearInvocations(statistics);
         assertThatThrownBy(() -> service.analyze(7L, "查询所有客户的姓名和电话号码"))
                 .isInstanceOf(AiUnsupportedAnalysisException.class);
@@ -233,9 +238,11 @@ class QwenAnalysisLiveIntegrationTest {
 
     @SpringBootConfiguration
     @EnableAutoConfiguration(exclude = DataSourceAutoConfiguration.class)
-    @Import({AiChatClientConfig.class, AiAnalysisService.class, CustomerStatisticsToolFactory.class})
+    @Import({AiChatClientConfig.class, AiAnalysisService.class, CustomerStatisticsToolFactory.class,
+            CustomerAnalysisScopePolicy.class})
     static class TestApplication {
         @Bean CustomerStatisticsService customerStatisticsService() { return mock(CustomerStatisticsService.class); }
         @Bean DataScopeResolver dataScopeResolver() { return mock(DataScopeResolver.class); }
+        @Bean SysUserMapper sysUserMapper() { return mock(SysUserMapper.class); }
     }
 }

@@ -2,6 +2,7 @@ package com.company.crm.ai.tool;
 
 import com.company.crm.dto.statistics.CustomerStatisticsResult;
 import com.company.crm.enums.StatisticsTimeRange;
+import com.company.crm.enums.CustomerQueryScopeIntent;
 import com.company.crm.exception.AiAuthenticationContextException;
 import com.company.crm.exception.AiToolArgumentException;
 import com.company.crm.exception.AiToolInvocationException;
@@ -36,13 +37,14 @@ class CustomerStatisticsToolTest {
         String schema = callbacks[0].getToolDefinition().inputSchema();
         assertThat(schema).contains("timeRange", "ALL", "CURRENT_MONTH", "LAST_MONTH", "RECENT_30_DAYS");
         assertThat(schema).doesNotContain("userId", "authenticatedUserId", "deptId", "dataScope",
-                "role", "permission", "sql", "startTime", "endTime", "customerId", "salesUserId");
+                "role", "permission", "sql", "startTime", "endTime", "customerId", "salesUserId",
+                "requestedScope", "effectiveScope", "validatedRequestedScope");
     }
 
     @Test
     void shouldUseBoundTrustedUserAndCaptureSuccessfulResult() {
         CustomerStatisticsResult expected = result("SELF", StatisticsTimeRange.CURRENT_MONTH);
-        when(statisticsService.getStatistics(7L, StatisticsTimeRange.CURRENT_MONTH)).thenReturn(expected);
+        when(statisticsService.getStatistics(7L, StatisticsTimeRange.CURRENT_MONTH, CustomerQueryScopeIntent.CURRENT_AUTHORIZED)).thenReturn(expected);
         CustomerStatisticsTool tool = factory.create(7L);
 
         CustomerStatisticsResult actual = tool.getCustomerStatistics(StatisticsTimeRange.CURRENT_MONTH);
@@ -50,21 +52,21 @@ class CustomerStatisticsToolTest {
         assertThat(actual).isSameAs(expected);
         assertThat(tool.getExecution().status()).isEqualTo(CustomerStatisticsTool.ExecutionStatus.SUCCEEDED);
         assertThat(tool.getExecution().result()).isSameAs(expected);
-        verify(statisticsService).getStatistics(7L, StatisticsTimeRange.CURRENT_MONTH);
+        verify(statisticsService).getStatistics(7L, StatisticsTimeRange.CURRENT_MONTH, CustomerQueryScopeIntent.CURRENT_AUTHORIZED);
     }
 
     @Test
     void shouldKeepDifferentRequestToolsIsolated() {
-        when(statisticsService.getStatistics(7L, StatisticsTimeRange.ALL)).thenReturn(result("SELF", StatisticsTimeRange.ALL));
-        when(statisticsService.getStatistics(8L, StatisticsTimeRange.LAST_MONTH)).thenReturn(result("DEPT", StatisticsTimeRange.LAST_MONTH));
+        when(statisticsService.getStatistics(7L, StatisticsTimeRange.ALL, CustomerQueryScopeIntent.CURRENT_AUTHORIZED)).thenReturn(result("SELF", StatisticsTimeRange.ALL));
+        when(statisticsService.getStatistics(8L, StatisticsTimeRange.LAST_MONTH, CustomerQueryScopeIntent.CURRENT_AUTHORIZED)).thenReturn(result("DEPT", StatisticsTimeRange.LAST_MONTH));
         CustomerStatisticsTool first = factory.create(7L);
         CustomerStatisticsTool second = factory.create(8L);
 
         first.getCustomerStatistics(StatisticsTimeRange.ALL);
         second.getCustomerStatistics(StatisticsTimeRange.LAST_MONTH);
 
-        verify(statisticsService).getStatistics(7L, StatisticsTimeRange.ALL);
-        verify(statisticsService).getStatistics(8L, StatisticsTimeRange.LAST_MONTH);
+        verify(statisticsService).getStatistics(7L, StatisticsTimeRange.ALL, CustomerQueryScopeIntent.CURRENT_AUTHORIZED);
+        verify(statisticsService).getStatistics(8L, StatisticsTimeRange.LAST_MONTH, CustomerQueryScopeIntent.CURRENT_AUTHORIZED);
         assertThat(first.getExecution().result().dataScope()).isEqualTo("SELF");
         assertThat(second.getExecution().result().dataScope()).isEqualTo("DEPT");
     }
@@ -83,20 +85,20 @@ class CustomerStatisticsToolTest {
         assertThat(tool.getExecution().status()).isEqualTo(CustomerStatisticsTool.ExecutionStatus.FAILED);
         assertThat(tool.getExecution().result()).isNull();
         verify(statisticsService, never()).getStatistics(org.mockito.ArgumentMatchers.any(),
-                org.mockito.ArgumentMatchers.any());
+                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
     }
 
     @Test
     void shouldPreserveScopeAndDataFailuresWithoutFalseSuccess() {
         DataScopeConfigurationException scopeFailure = new DataScopeConfigurationException("forbidden");
-        when(statisticsService.getStatistics(7L, StatisticsTimeRange.ALL)).thenThrow(scopeFailure);
+        when(statisticsService.getStatistics(7L, StatisticsTimeRange.ALL, CustomerQueryScopeIntent.CURRENT_AUTHORIZED)).thenThrow(scopeFailure);
         CustomerStatisticsTool scopeTool = factory.create(7L);
         assertThatThrownBy(() -> scopeTool.getCustomerStatistics(StatisticsTimeRange.ALL)).isSameAs(scopeFailure);
         assertThat(scopeTool.getExecution().status()).isEqualTo(CustomerStatisticsTool.ExecutionStatus.FAILED);
         assertThat(scopeTool.getExecution().result()).isNull();
 
         CustomerStatisticsDataException dataFailure = new CustomerStatisticsDataException("invalid aggregate");
-        when(statisticsService.getStatistics(8L, StatisticsTimeRange.ALL)).thenThrow(dataFailure);
+        when(statisticsService.getStatistics(8L, StatisticsTimeRange.ALL, CustomerQueryScopeIntent.CURRENT_AUTHORIZED)).thenThrow(dataFailure);
         CustomerStatisticsTool dataTool = factory.create(8L);
         assertThatThrownBy(() -> dataTool.getCustomerStatistics(StatisticsTimeRange.ALL)).isSameAs(dataFailure);
         assertThat(dataTool.getExecution().status()).isEqualTo(CustomerStatisticsTool.ExecutionStatus.FAILED);
@@ -106,7 +108,7 @@ class CustomerStatisticsToolTest {
     @Test
     void shouldRejectRepeatedInvocationAndKeepFirstSuccess() {
         CustomerStatisticsResult expected = result("ALL", StatisticsTimeRange.ALL);
-        when(statisticsService.getStatistics(7L, StatisticsTimeRange.ALL)).thenReturn(expected);
+        when(statisticsService.getStatistics(7L, StatisticsTimeRange.ALL, CustomerQueryScopeIntent.CURRENT_AUTHORIZED)).thenReturn(expected);
         CustomerStatisticsTool tool = factory.create(7L);
         tool.getCustomerStatistics(StatisticsTimeRange.ALL);
 
@@ -114,13 +116,57 @@ class CustomerStatisticsToolTest {
                 .isInstanceOf(AiToolInvocationException.class);
         assertThat(tool.getExecution().status()).isEqualTo(CustomerStatisticsTool.ExecutionStatus.SUCCEEDED);
         assertThat(tool.getExecution().result()).isSameAs(expected);
-        verify(statisticsService).getStatistics(7L, StatisticsTimeRange.ALL);
+        verify(statisticsService).getStatistics(7L, StatisticsTimeRange.ALL, CustomerQueryScopeIntent.CURRENT_AUTHORIZED);
     }
 
     @Test
     void shouldRejectMissingOrInvalidTrustedIdentity() {
         assertThatThrownBy(() -> factory.create(null)).isInstanceOf(AiAuthenticationContextException.class);
         assertThatThrownBy(() -> factory.create(0L)).isInstanceOf(AiAuthenticationContextException.class);
+    }
+
+    @Test
+    void shouldBindDifferentScopesForSameUserWithoutSharingExecution() {
+        var selfResult = result("SELF", StatisticsTimeRange.ALL);
+        var deptResult = result("DEPT", StatisticsTimeRange.ALL);
+        when(statisticsService.getStatistics(7L, StatisticsTimeRange.ALL, CustomerQueryScopeIntent.SELF)).thenReturn(selfResult);
+        when(statisticsService.getStatistics(7L, StatisticsTimeRange.ALL, CustomerQueryScopeIntent.DEPT)).thenReturn(deptResult);
+        var self = factory.create(7L, CustomerQueryScopeIntent.SELF);
+        var dept = factory.create(7L, CustomerQueryScopeIntent.DEPT);
+        assertThat(self.getCustomerStatistics(StatisticsTimeRange.ALL)).isSameAs(selfResult);
+        assertThat(dept.getExecution().status()).isEqualTo(CustomerStatisticsTool.ExecutionStatus.NOT_EXECUTED);
+        assertThat(dept.getCustomerStatistics(StatisticsTimeRange.ALL)).isSameAs(deptResult);
+        assertThatThrownBy(() -> self.getCustomerStatistics(StatisticsTimeRange.ALL))
+                .isInstanceOf(AiToolInvocationException.class);
+        verify(statisticsService).getStatistics(7L, StatisticsTimeRange.ALL, CustomerQueryScopeIntent.SELF);
+        verify(statisticsService).getStatistics(7L, StatisticsTimeRange.ALL, CustomerQueryScopeIntent.DEPT);
+        org.mockito.Mockito.verifyNoMoreInteractions(statisticsService);
+        String schema = MethodToolCallbackProvider.builder().toolObjects(self).build().getToolCallbacks()[0]
+                .getToolDefinition().inputSchema();
+        assertThat(schema).isEqualTo(MethodToolCallbackProvider.builder().toolObjects(dept).build().getToolCallbacks()[0]
+                .getToolDefinition().inputSchema());
+    }
+
+    @Test
+    void shouldPropagateS1ScopeRejectionWithoutBroadeningOrRetrying() {
+        var failure = new com.company.crm.exception.AiUnsupportedAnalysisException("scope rejected");
+        when(statisticsService.getStatistics(7L, StatisticsTimeRange.ALL, CustomerQueryScopeIntent.SELF)).thenThrow(failure);
+        var tool = factory.create(7L, CustomerQueryScopeIntent.SELF);
+        assertThatThrownBy(() -> tool.getCustomerStatistics(StatisticsTimeRange.ALL)).isSameAs(failure);
+        assertThat(tool.getExecution().status()).isEqualTo(CustomerStatisticsTool.ExecutionStatus.FAILED);
+        assertThat(tool.getExecution().result()).isNull();
+        assertThatThrownBy(() -> tool.getCustomerStatistics(StatisticsTimeRange.ALL)).isInstanceOf(AiToolInvocationException.class);
+        verify(statisticsService).getStatistics(7L, StatisticsTimeRange.ALL, CustomerQueryScopeIntent.SELF);
+        org.mockito.Mockito.verifyNoMoreInteractions(statisticsService);
+    }
+
+    @Test
+    void shouldRejectInvalidScopeBinding() {
+        assertThatThrownBy(() -> factory.create(7L, null)).isInstanceOf(AiToolArgumentException.class);
+        assertThatThrownBy(() -> factory.create(7L, CustomerQueryScopeIntent.UNSUPPORTED)).isInstanceOf(AiToolArgumentException.class);
+        assertThatThrownBy(() -> factory.create(null, CustomerQueryScopeIntent.SELF)).isInstanceOf(AiAuthenticationContextException.class);
+        assertThatThrownBy(() -> factory.create(0L, CustomerQueryScopeIntent.SELF)).isInstanceOf(AiAuthenticationContextException.class);
+        org.mockito.Mockito.verifyNoInteractions(statisticsService);
     }
 
     private CustomerStatisticsResult result(String scope, StatisticsTimeRange range) {

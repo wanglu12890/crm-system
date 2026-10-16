@@ -2,6 +2,7 @@ package com.company.crm.service;
 
 import com.company.crm.dto.statistics.CustomerStatisticsResult;
 import com.company.crm.enums.StatisticsTimeRange;
+import com.company.crm.enums.CustomerQueryScopeIntent;
 
 public interface CustomerStatisticsService {
     /**
@@ -9,4 +10,8 @@ public interface CustomerStatisticsService {
      * The user id must come from the trusted server-side authentication flow, never from a client or model argument.
      */
     CustomerStatisticsResult getStatistics(Long authenticatedUserId, StatisticsTimeRange timeRange);
+
+    /** Validates requested scope against current authorization and business role before querying. */
+    CustomerStatisticsResult getStatistics(Long authenticatedUserId, StatisticsTimeRange timeRange,
+                                           CustomerQueryScopeIntent requestedScope);
 }

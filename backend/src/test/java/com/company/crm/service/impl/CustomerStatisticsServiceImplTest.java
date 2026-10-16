@@ -3,7 +3,11 @@ package com.company.crm.service.impl;
 import com.company.crm.dto.statistics.CustomerStatisticsAggregate;
 import com.company.crm.dto.statistics.CustomerStatisticsResult;
 import com.company.crm.enums.StatisticsTimeRange;
+import com.company.crm.enums.CustomerQueryScopeIntent;
+import com.company.crm.mapper.SysUserMapper;
+import com.company.crm.service.CustomerAnalysisScopePolicy;
 import com.company.crm.exception.CustomerStatisticsDataException;
+import com.company.crm.exception.AiUnsupportedAnalysisException;
 import com.company.crm.exception.DataScopeConfigurationException;
 import com.company.crm.mapper.CustomerMapper;
 import com.company.crm.security.datascope.DataScopeContext;
@@ -12,6 +16,8 @@ import com.company.crm.security.datascope.DataScopeType;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -31,6 +37,7 @@ import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.doThrow;
 
 @ExtendWith(MockitoExtension.class)
 class CustomerStatisticsServiceImplTest {
@@ -41,13 +48,15 @@ class CustomerStatisticsServiceImplTest {
 
     @Mock private CustomerMapper customerMapper;
     @Mock private DataScopeResolver dataScopeResolver;
+    @Mock private SysUserMapper sysUserMapper;
 
     private CustomerStatisticsServiceImpl service;
 
     @BeforeEach
     void setUp() {
         service = new CustomerStatisticsServiceImpl(
-                customerMapper, dataScopeResolver, Clock.fixed(FIXED_INSTANT, SHANGHAI)
+                customerMapper, dataScopeResolver, Clock.fixed(FIXED_INSTANT, SHANGHAI),
+                new CustomerAnalysisScopePolicy(dataScopeResolver, sysUserMapper)
         );
     }
 
@@ -243,6 +252,115 @@ class CustomerStatisticsServiceImplTest {
         assertThat(endCaptor.getValue()).isEqualTo(expectedEnd);
         assertThat(result.startTime().toLocalDateTime()).isEqualTo(expectedStart);
         assertThat(result.endTime().toLocalDateTime()).isEqualTo(expectedEnd);
+    }
+
+    @ParameterizedTest
+    @EnumSource(StatisticsTimeRange.class)
+    void managerSelfUsesTrustedOwnerAndExistingTimeWindows(StatisticsTimeRange range) {
+        when(dataScopeResolver.resolve(USER_ID, "customer:list")).thenReturn(scope(DataScopeType.DEPT, 20L));
+        when(sysUserMapper.selectRoleCodesByUserId(USER_ID)).thenReturn(java.util.List.of("SALES_MANAGER"));
+        when(customerMapper.selectCustomerStatistics(any(), any(), any()))
+                .thenReturn(aggregate(10, 1, 2, 3, 1, 3));
+
+        CustomerStatisticsResult result = service.getStatistics(USER_ID, range, CustomerQueryScopeIntent.SELF);
+
+        ArgumentCaptor<DataScopeContext> context = ArgumentCaptor.forClass(DataScopeContext.class);
+        ArgumentCaptor<LocalDateTime> start = ArgumentCaptor.forClass(LocalDateTime.class);
+        ArgumentCaptor<LocalDateTime> end = ArgumentCaptor.forClass(LocalDateTime.class);
+        verify(customerMapper).selectCustomerStatistics(context.capture(), start.capture(), end.capture());
+        assertThat(context.getValue().getScope()).isEqualTo(DataScopeType.SELF);
+        assertThat(context.getValue().getUserId()).isEqualTo(USER_ID);
+        assertThat(context.getValue().getDeptId()).isNull();
+        assertThat(result.dataScope()).isEqualTo("SELF");
+        assertThat(result.timeRange()).isEqualTo(range);
+        assertThat(result.totalCustomers()).isEqualTo(10);
+        assertThat(java.util.List.of(result.levelA(), result.levelB(), result.levelC(), result.levelD(), result.unrated()))
+                .containsExactly(1L, 2L, 3L, 1L, 3L);
+        LocalDateTime reference = LocalDateTime.of(2026, 10, 10, 16, 30, 45);
+        LocalDateTime expectedStart = switch (range) {
+            case ALL -> null;
+            case CURRENT_MONTH -> LocalDateTime.of(2026, 10, 1, 0, 0);
+            case LAST_MONTH -> LocalDateTime.of(2026, 9, 1, 0, 0);
+            case RECENT_30_DAYS -> reference.minusDays(30);
+        };
+        LocalDateTime expectedEnd = switch (range) {
+            case ALL -> null;
+            case CURRENT_MONTH -> LocalDateTime.of(2026, 11, 1, 0, 0);
+            case LAST_MONTH -> LocalDateTime.of(2026, 10, 1, 0, 0);
+            case RECENT_30_DAYS -> reference;
+        };
+        assertThat(start.getValue()).isEqualTo(expectedStart);
+        assertThat(end.getValue()).isEqualTo(expectedEnd);
+        assertThat(result.startTime() == null ? null : result.startTime().toLocalDateTime()).isEqualTo(expectedStart);
+        assertThat(result.endTime() == null ? null : result.endTime().toLocalDateTime()).isEqualTo(expectedEnd);
+    }
+
+    @Test
+    void explicitDepartmentRetainsResolvedContext() {
+        DataScopeContext department = scope(DataScopeType.DEPT, 20L);
+        when(dataScopeResolver.resolve(USER_ID, "customer:list")).thenReturn(department);
+        when(sysUserMapper.selectRoleCodesByUserId(USER_ID)).thenReturn(java.util.List.of("SALES_MANAGER"));
+        when(customerMapper.selectCustomerStatistics(department, null, null)).thenReturn(aggregate(0, 0, 0, 0, 0, 0));
+        assertThat(service.getStatistics(USER_ID, StatisticsTimeRange.ALL, CustomerQueryScopeIntent.DEPT).dataScope())
+                .isEqualTo("DEPT");
+        verify(customerMapper).selectCustomerStatistics(department, null, null);
+    }
+
+    @Test
+    void defaultAndLegacyQueriesDoNotApplyNewRoleRestrictions() {
+        DataScopeContext authorized = scope(DataScopeType.ALL, null);
+        when(dataScopeResolver.resolve(USER_ID, "customer:list")).thenReturn(authorized);
+        when(customerMapper.selectCustomerStatistics(authorized, null, null)).thenReturn(aggregate(0, 0, 0, 0, 0, 0));
+        assertThat(service.getStatistics(USER_ID, StatisticsTimeRange.ALL).dataScope()).isEqualTo("ALL");
+        assertThat(service.getStatistics(USER_ID, StatisticsTimeRange.ALL, CustomerQueryScopeIntent.CURRENT_AUTHORIZED)
+                .dataScope()).isEqualTo("ALL");
+        verifyNoInteractions(sysUserMapper);
+    }
+
+    @Test
+    void selfWithNoCustomersReturnsZero() {
+        when(dataScopeResolver.resolve(USER_ID, "customer:list")).thenReturn(scope(DataScopeType.DEPT, 20L));
+        when(sysUserMapper.selectRoleCodesByUserId(USER_ID)).thenReturn(java.util.List.of("SALES_MANAGER"));
+        when(customerMapper.selectCustomerStatistics(any(), isNull(), isNull()))
+                .thenReturn(aggregate(0, null, null, null, null, null));
+        var result = service.getStatistics(USER_ID, StatisticsTimeRange.ALL, CustomerQueryScopeIntent.SELF);
+        assertThat(java.util.List.of(result.totalCustomers(), result.levelA(), result.levelB(), result.levelC(),
+                result.levelD(), result.unrated())).containsOnly(0L);
+        assertThat(result.dataScope()).isEqualTo("SELF");
+    }
+
+    @Test
+    void explicitInvalidScopesNeverReachMapper() {
+        assertThatThrownBy(() -> service.getStatistics(USER_ID, StatisticsTimeRange.ALL, null))
+                .isInstanceOf(AiUnsupportedAnalysisException.class);
+        assertThatThrownBy(() -> service.getStatistics(USER_ID, StatisticsTimeRange.ALL, CustomerQueryScopeIntent.UNSUPPORTED))
+                .isInstanceOf(AiUnsupportedAnalysisException.class);
+        when(dataScopeResolver.resolve(USER_ID, "customer:list")).thenReturn(scope(DataScopeType.ALL, null));
+        when(sysUserMapper.selectRoleCodesByUserId(USER_ID)).thenReturn(java.util.List.of("SYSTEM_ADMIN"));
+        assertThatThrownBy(() -> service.getStatistics(USER_ID, StatisticsTimeRange.ALL, CustomerQueryScopeIntent.SELF))
+                .isInstanceOf(AiUnsupportedAnalysisException.class);
+        verifyNoInteractions(customerMapper);
+    }
+
+    @Test
+    void explicitSelfPropagatesAuthorizationFailures() {
+        for (String reason : java.util.List.of("no customer:list scope", "DEPT requires department")) {
+            var failure = new DataScopeConfigurationException(reason);
+            doThrow(failure).when(dataScopeResolver).resolve(USER_ID, "customer:list");
+            assertThatThrownBy(() -> service.getStatistics(USER_ID, StatisticsTimeRange.ALL, CustomerQueryScopeIntent.SELF))
+                    .isSameAs(failure);
+        }
+        verifyNoInteractions(customerMapper, sysUserMapper);
+    }
+
+    @Test
+    void bothPublicEntriesDeclareReadOnlyTransactions() throws Exception {
+        for (var method : CustomerStatisticsServiceImpl.class.getDeclaredMethods()) {
+            if (method.getName().equals("getStatistics")) {
+                assertThat(method.getAnnotation(org.springframework.transaction.annotation.Transactional.class).readOnly())
+                        .isTrue();
+            }
+        }
     }
 
     private DataScopeContext scope(DataScopeType type, Long deptId) {
