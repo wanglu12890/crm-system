@@ -6,6 +6,8 @@
 
 当前事实以生产代码和测试为准。开发执行规则见根目录 `AGENTS.md`；前后端编码细则见 `docs/development/`。
 
+AI版本基线更新：2026-10-16。V1已完成，V1.1已完成并验收；V2尚未开始开发，准备需求分析。
+
 ## 2. 项目概览
 
 - 企业内部 B 端 CRM，采用 Spring Boot REST API 与 Vue SPA 的前后端分离架构。
@@ -13,7 +15,7 @@
 - 系统管理 V1 已具备认证、用户、角色、权限及前端权限控制。
 - 客户管理 V1 已具备客户列表、新建客户、数据范围控制和客户统计核心服务。
 - 联系人、跟进、线索、商机、合同、数据分析等仍以数据库基础或前端占位为主，不能据此假定已有完整业务 API。
-- AI Agent V1 的S1统计、S2-A/S2-B正式接口与Tool Calling、C1范围语义校验、S3-A前端均已完成；S3-B核心真实链路与SQL对账通过，阶段性验收PARTIAL，SYSTEM_ADMIN范围配置和缺权限真实账号验收待收尾。
+- AI Agent V1统计闭环及V1.1范围优化已完成；V1.1 S3真实Qwen、SQL对账与浏览器验收PASS。早期SYSTEM_ADMIN实际SELF的记录不再代表最新验收环境，2026-10-16核验该测试账号实际ALL。
 
 ## 3. 当前技术基线
 
@@ -97,6 +99,7 @@ sys_user → sys_user_role → sys_role
 - `SUPER_ADMIN` 不会隐式拥有全部权限，运行时授权依赖真实角色权限关系。
 - Controller 使用 `@PreAuthorize` 做功能权限；Service 对目标对象、角色边界和数据范围做第二层强制校验。
 - 当前客户查询使用 `ALL`、`DEPT`、`SELF` 数据范围；解析失败应拒绝访问，不能降级为更宽范围。
+- AI V1.1区分最大授权、请求意图与实际执行范围；显式查询由CustomerAnalysisScopePolicy核验可信有效角色与授权。完整矩阵只维护在[AI需求第3.2节](ai-agent/AI_AGENT_V1_REQUIREMENTS.md#32-v11-查询范围与业务身份规则主表)，不扩展多角色组合；旧S1接口与默认查询保留多角色最大范围语义。
 - 前端菜单、路由和按钮权限仅改善交互，不能替代后端安全边界。
 - 根管理员、角色创建/编辑/配权和用户对象范围的详细规则，应以对应 Service、测试及任务相关模块文档为准。
 
@@ -116,11 +119,15 @@ sys_user → sys_user_role → sys_role
 - 客户统计核心服务：复用客户可见性 SQL，支持时间范围统计和等级聚合。
 - 详细业务规则见 `docs/customer-management/CUSTOMER_V1_RULES.md`，测试数据说明见同目录文档。
 
-### AI Agent V1
+### AI Agent V1 / V1.1
 
 - Spring AI 1.1.8 与通义千问的 OpenAI 兼容配置已建立，生产默认不主动启用模型。
 - 已有隔离的 live smoke test，需要显式环境条件才运行。
 - 正式POST /api/ai/analysis要求ai:analysis和customer:list双权限；Qwen分类后由Java校验请求范围，唯一getCustomerStatistics工具仅接受timeRange，最多一次S1统计，回答由Java生成。
+- 经理可从合法DEPT缩小为本人SELF；SELF按owner_id绑定认证用户。管理员ALL仅表示查看权限，不赋予明确查询本人客户的销售业务资格。
+- `backend/src/main/java/com/company/crm/`下主要入口：`controller/AiAnalysisController.java`、`service/AiAnalysisService.java`、`service/CustomerAnalysisScopePolicy.java`、`ai/tool/CustomerStatisticsToolFactory.java`、`ai/tool/CustomerStatisticsTool.java`、`service/impl/CustomerStatisticsServiceImpl.java`。
+- S1保留`getStatistics(Long, StatisticsTimeRange)`并新增带`CustomerQueryScopeIntent`的重载；AI/Tool使用新入口，S1再次独立验证，Mapper与DataScopeResolver复用不变。返回analysisContext.dataScope为实际执行范围，经理本人查询为SELF。
+- 前端`frontend/src/views/analysis/AiAnalysis.vue`使用正式接口，支持指标、等级分布、加载/错误、复制和内存临时会话；刷新清空，不是持久化对话，也无多轮记忆。
 - AI 需求、数据与技术边界见 `docs/ai-agent/`；历史接入验收见 `docs/historical/`。
 
 ## 8. 关键工程约束
@@ -137,7 +144,8 @@ sys_user → sys_user_role → sys_role
 - Controller：`@WebMvcTest` + MockMvc + Security Test，覆盖 401/403、校验、JSON 合同和授权表达式。
 - Service/Security：Mockito 单元测试，覆盖角色边界、数据范围、事务前置校验和 JWT 行为。
 - Mapper：对关键动态 SQL 有结构验证；真实数据库联调仍需独立环境。
-- 前端当前以 TypeScript 检查和 Vite 构建为主要自动验证，尚无完整组件测试套件。
+- 前端以TypeScript检查、Vite构建及`frontend/tests/ai-analysis.test.mjs`五项离线测试为主，尚无完整组件测试套件。
+- V1.1 S3已有154项后端定向测试、5项前端离线测试、真实API及浏览器通过记录；证据与真实数据覆盖限制见版本记录，本次上下文更新不代表重新运行测试。
 - 测试范围和执行策略遵循 `AGENTS.md`，不能把历史测试结果当作当前运行结果。
 
 ## 10. 文档导航
@@ -147,6 +155,7 @@ sys_user → sys_user_role → sys_role
 - 前端开发规范：`docs/development/FRONTEND_CONVENTIONS.md`
 - 客户 V1 规则：`docs/customer-management/CUSTOMER_V1_RULES.md`
 - AI Agent 需求/数据/技术：`docs/ai-agent/`
+- V1.1变更与验收：[AI_AGENT_V1_1_CHANGELOG.md](ai-agent/AI_AGENT_V1_1_CHANGELOG.md)
 - 架构与数据库概览：`docs/architecture.md`、`docs/database.md`
 - 阶段性审查、升级和验收记录：`docs/historical/`
 
@@ -155,5 +164,6 @@ sys_user → sys_user_role → sys_role
 - 当前没有 Refresh Token、Token 黑名单或密码变更后的即时 Token 失效机制。
 - 权限与客户数据初始化仍依赖手工 SQL，没有数据库迁移框架。
 - 部分数据库表和前端菜单是后续模块占位，不代表对应 API 已实现。
-- AI V1核心真实联调通过，但现有SYSTEM_ADMIN角色实际SELF与设计ALL不符，修改需另行确认；缺权限真实账号403/菜单验收尚待补充。没有通用动态工具授权、多轮记忆或历史持久化。
+- AI V1/V1.1已验收；真实缺权限账号、模型故障注入和部分数据边界未现场覆盖，不能把抽样通过视为所有表达稳定。没有通用动态工具授权、多轮记忆或历史持久化；V2风险识别与跟进建议尚未实现。
+- 通用不支持异常仍有V1旧范围提示；ALL时后端JSON省略null时间边界，前端类型仍声明必填可空。属待后续处理的源码差异，本次文档维护不改代码。
 - 文档可能落后；开始具体任务时仍需检查直接相关源码和测试。

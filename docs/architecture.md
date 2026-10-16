@@ -6,13 +6,15 @@
 
 生产环境建议采用 `Nginx -> frontend 静态资源 / backend API -> MySQL`，密钥与数据库凭据仅通过环境变量或密钥管理系统注入。
 
+当前实现基线（2026-10-16）：AI V1已完成，V1.1已完成并验收，V2尚未开发。本文中的扩展模块与企业级演进建议不等于已实现能力；实际模块状态见[项目上下文](CODEX_CONTEXT.md)。
+
 ## 2. 目录与职责
 
 ### 后端
 
 | 目录 | 职责 | 企业级划分原因 |
 |---|---|---|
-| `controller` | 接收 HTTP 请求、参数校验、权限入口、返回统一响应 | 隔离协议层，不承载业务规则 |
+| `controller` | 接收 HTTP 请求、参数校验、权限入口、返回接口响应 | 隔离协议层，不承载业务规则 |
 | `service` | 业务能力接口、用例编排、事务边界 | 便于测试、复用与替换实现 |
 | `service/impl` | Service 实现，组合 Mapper 和领域规则 | 接口与实现分离，避免调用方依赖细节 |
 | `mapper` | MyBatis-Plus Mapper 与复杂查询接口 | 集中数据访问，避免 SQL 渗透到业务层 |
@@ -53,11 +55,13 @@
 
 完整链路：
 
-`Vue View -> api 模块 -> Axios 拦截器附加 Bearer Token -> Security JWT Filter -> Controller DTO 校验 -> Service 权限/业务/事务 -> Mapper -> MyBatis-Plus -> MySQL -> Entity/投影 -> Service 转 VO -> 统一 Result -> Axios 响应拦截器 -> Pinia/View`
+`Vue View -> api 模块 -> Axios 拦截器附加 Bearer Token -> Security JWT Filter -> Controller DTO 校验 -> Service 权限/业务/事务 -> Mapper -> MyBatis-Plus -> MySQL -> Entity/投影 -> Service 转 VO -> Axios 响应拦截器 -> Pinia/View`
 
-异常在后端由全局异常处理器转换为标准错误码；401 触发前端刷新 Token 或退出，403 展示无权限，业务错误展示可读消息。
+当前成功响应按模块直接返回VO/列表，AI直接返回AiAnalysisVO，没有统一Result包装；错误由模块Advice或安全入口生成ProblemDetail及稳定code。401清理认证并退出，当前没有Refresh Token能力，不能把后续规划当作已实现。
 
 ## 4. 核心业务模块
+
+下表为整体业务职责规划，并非各模块API均已实现；当前认证、客户及系统管理实现状态以项目上下文为准。
 
 | 模块 | 核心职责 | 关键边界 |
 |---|---|---|
@@ -70,6 +74,14 @@
 | 合同管理 | 合同、金额、期限、审批状态 | 合同编号唯一，状态机限制非法变更 |
 | 数据统计 | 漏斗、业绩、转化率、趋势 | 按组织和数据权限聚合，大查询只读化/缓存化 |
 | 系统管理 | 用户、角色、权限、组织、字典、日志 | RBAC 控制功能权限，组织结构控制数据范围 |
+
+### AI 智能分析 V1 / V1.1（已实现并验收）
+
+`POST /api/ai/analysis → JWT/双权限 → Qwen严格分类 → CustomerAnalysisScopePolicy → 请求独立Tool → S1同一策略复核 → CustomerMapper聚合 → Java确定性回答`。
+
+支持客户总量、等级分布和四种创建时间窗口。Authorized Scope由DataScopeResolver解析；Requested Scope经可信角色业务校验后成为Effective Scope，返回analysisContext.dataScope为实际范围。经理DEPT→SELF不会改变最大授权、角色配置或客户列表范围；Tool只向模型暴露timeRange，身份与范围由Java不可变绑定。
+
+范围完整规则见[需求基线](ai-agent/AI_AGENT_V1_REQUIREMENTS.md)，接口与技术设计见[技术基线](ai-agent/AI_AGENT_V1_TECH_STACK.md)，验收及限制见[版本记录](ai-agent/AI_AGENT_V1_1_CHANGELOG.md)。前端只有内存临时会话；不含风险识别、跟进建议、RAG或会话持久化，不引入未经确认的V2架构。
 
 ## 5. 横切规范
 

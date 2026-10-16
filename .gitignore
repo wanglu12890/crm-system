@@ -135,11 +135,11 @@ $RECYCLE.BIN/
 # task
 # ==================================================
 task/
-
 skills/
-test-cases/
-
-docs/resume-audit
-
 log/
 .local
+
+# docs
+test-cases/
+docs/resume-audit
+
