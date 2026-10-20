@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.company.crm.mapper.CustomerRiskMapper">
+    <sql id="validFollow">f.follow_at IS NOT NULL AND f.follow_at &gt;= c.created_at AND f.follow_at &lt;= #{analysisTime}</sql>
+    <select id="selectCandidates" timeout="10" resultType="com.company.crm.dto.risk.CustomerRiskAggregate">
+        WITH eligible AS (
+            SELECT c.id, c.customer_no, c.customer_name, c.status AS customer_status, c.customer_level, c.created_at
+            FROM customer c
+            JOIN sys_user owner ON owner.id = c.owner_id AND owner.deleted = 0 AND owner.status = 1
+            WHERE c.deleted = 0 AND c.owner_id IS NOT NULL AND c.status IN ('POTENTIAL','ACTIVE')
+            <choose>
+                <when test="dataScope != null and dataScope.scopeCode == 'SELF' and dataScope.userId != null">AND c.owner_id = #{dataScope.userId}</when>
+                <when test="dataScope != null and dataScope.scopeCode == 'DEPT' and dataScope.deptId != null">AND owner.dept_id = #{dataScope.deptId}</when>
+                <otherwise>AND 1 = 0</otherwise>
+            </choose>
+            <if test="customerId != null">AND c.id = #{customerId}</if>
+            <if test="levels != null and !levels.isEmpty()">
+                AND (<foreach collection="levels" item="level" separator=" OR "><choose><when test="level == 'UNRATED'">c.customer_level IS NULL</when><otherwise>c.customer_level = #{level}</otherwise></choose></foreach>)
+            </if>
+            ORDER BY c.id LIMIT #{limit}
+        )
+        SELECT c.id, c.customer_no, c.customer_name, c.customer_status, c.customer_level, c.created_at,
+            COUNT(f.id) AS history_count,
+            SUM(CASE WHEN <include refid="validFollow"/> THEN 1 ELSE 0 END) AS valid_count,
+            COUNT(f.id) - SUM(CASE WHEN <include refid="validFollow"/> THEN 1 ELSE 0 END) AS anomalous_count,
+            MAX(CASE WHEN <include refid="validFollow"/> THEN f.follow_at END) AS last_valid_follow_at
+        FROM eligible c
+        LEFT JOIN follow_record f ON f.target_type = 'CUSTOMER' AND f.target_id = c.id AND f.deleted = 0
+        GROUP BY c.id, c.customer_no, c.customer_name, c.customer_status, c.customer_level, c.created_at
+        ORDER BY c.id
+    </select>
+</mapper>
