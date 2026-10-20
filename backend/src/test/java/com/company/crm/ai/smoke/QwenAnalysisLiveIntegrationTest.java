@@ -10,6 +10,7 @@ import com.company.crm.exception.AiUnsupportedAnalysisException;
 import com.company.crm.service.AiAnalysisService;
 import com.company.crm.service.CustomerStatisticsService;
 import com.company.crm.service.CustomerAnalysisScopePolicy;
+import com.company.crm.service.impl.AiAnalysisServiceImpl;
 import com.company.crm.mapper.SysUserMapper;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.BeforeEach;
@@ -238,7 +239,7 @@ class QwenAnalysisLiveIntegrationTest {
 
     @SpringBootConfiguration
     @EnableAutoConfiguration(exclude = DataSourceAutoConfiguration.class)
-    @Import({AiChatClientConfig.class, AiAnalysisService.class, CustomerStatisticsToolFactory.class,
+    @Import({AiChatClientConfig.class, AiAnalysisServiceImpl.class, CustomerStatisticsToolFactory.class,
             CustomerAnalysisScopePolicy.class})
     static class TestApplication {
         @Bean CustomerStatisticsService customerStatisticsService() { return mock(CustomerStatisticsService.class); }

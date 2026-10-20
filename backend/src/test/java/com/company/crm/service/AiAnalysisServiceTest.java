@@ -9,6 +9,7 @@ import com.company.crm.security.datascope.DataScopeResolver;
 import com.company.crm.security.datascope.DataScopeContext;
 import com.company.crm.security.datascope.DataScopeType;
 import com.company.crm.exception.*;
+import com.company.crm.service.impl.AiAnalysisServiceImpl;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -21,6 +22,7 @@ import org.springframework.ai.chat.model.*;
 import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.ai.model.tool.ToolCallingChatOptions;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.context.annotation.AnnotationConfigApplicationContext;
 import java.time.ZonedDateTime;
 import java.util.List;
 import static org.assertj.core.api.Assertions.*;
@@ -40,10 +42,26 @@ class AiAnalysisServiceTest {
         var client = ChatClient.create(model);
         clearInvocations(model);
         when(provider.getIfAvailable()).thenReturn(client);
-        service = new AiAnalysisService(new CustomerStatisticsToolFactory(statistics), provider, new ObjectMapper(),
+        service = new AiAnalysisServiceImpl(new CustomerStatisticsToolFactory(statistics), provider, new ObjectMapper(),
                 new CustomerAnalysisScopePolicy(scopes, users));
         org.mockito.Mockito.lenient().when(scopes.resolve(any(Long.class), org.mockito.ArgumentMatchers.eq("customer:list")))
                 .thenAnswer(invocation -> new DataScopeContext(DataScopeType.SELF, invocation.getArgument(0), null));
+    }
+
+    @Test
+    void springContextInjectsSingleImplementationThroughInterface() {
+        try (var context = new AnnotationConfigApplicationContext()) {
+            context.registerBean(CustomerStatisticsService.class, () -> statistics);
+            context.registerBean(DataScopeResolver.class, () -> scopes);
+            context.registerBean(SysUserMapper.class, () -> users);
+            context.getBeanFactory().registerSingleton("objectMapper", new ObjectMapper());
+            context.register(CustomerStatisticsToolFactory.class, CustomerAnalysisScopePolicy.class,
+                    AiAnalysisServiceImpl.class);
+            context.refresh();
+
+            assertThat(context.getBeansOfType(AiAnalysisService.class)).hasSize(1);
+            assertThat(context.getBean(AiAnalysisService.class)).isInstanceOf(AiAnalysisServiceImpl.class);
+        }
     }
     @ParameterizedTest
     @CsvSource({"CUSTOMER_TOTAL,CURRENT_MONTH,本月新增了多少客户？,本月新增客户",
@@ -89,7 +107,7 @@ class AiAnalysisServiceTest {
     @SuppressWarnings("unchecked")
     void inactiveProfileDoesNotInvokeModel() {
         ObjectProvider<ChatClient> provider = mock(ObjectProvider.class);
-        var inactive = new AiAnalysisService(new CustomerStatisticsToolFactory(statistics), provider, new ObjectMapper(),
+        var inactive = new AiAnalysisServiceImpl(new CustomerStatisticsToolFactory(statistics), provider, new ObjectMapper(),
                 new CustomerAnalysisScopePolicy(scopes, users));
         assertThatThrownBy(() -> inactive.analyze(7L, "客户数量")).isInstanceOf(AiAnalysisNotReadyException.class);
         verifyNoInteractions(model, statistics);
@@ -352,7 +370,7 @@ class AiAnalysisServiceTest {
         ObjectProvider<ChatClient> provider = mock(ObjectProvider.class);
         var client = ChatClient.create(model);
         when(provider.getIfAvailable()).thenReturn(client);
-        var orchestrator = new AiAnalysisService(new CustomerStatisticsToolFactory(realStatistics), provider,
+        var orchestrator = new AiAnalysisServiceImpl(new CustomerStatisticsToolFactory(realStatistics), provider,
                 new ObjectMapper(), policy);
         if (authorizationChanged) {
             assertThatThrownBy(() -> orchestrator.analyze(7L, "我个人有多少客户"))
