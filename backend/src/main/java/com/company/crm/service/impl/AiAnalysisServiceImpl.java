@@ -13,7 +13,7 @@ import com.company.crm.exception.AiToolArgumentException;
 import com.company.crm.exception.AiToolInvocationException;
 import com.company.crm.service.AiAnalysisService;
 import com.company.crm.service.CustomerAnalysisScopePolicy;
-import com.company.crm.vo.AiAnalysisVO;
+import com.company.crm.vo.ai.AiAnalysisVO;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.ai.chat.client.ChatClient;

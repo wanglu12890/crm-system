@@ -1,4 +1,4 @@
-package com.company.crm.vo;
+package com.company.crm.vo.ai;
 
 import com.company.crm.dto.statistics.CustomerStatisticsResult;
 import com.company.crm.enums.CustomerAnalysisIntent;

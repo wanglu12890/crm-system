@@ -20,7 +20,8 @@ class CustomerRiskServiceTest {
     final Clock clock=Clock.fixed(Instant.parse("2026-10-18T04:00:00Z"),ZoneOffset.UTC);
     final DataScopeContext scope=new DataScopeContext(DataScopeType.SELF,7L,null);
     final CustomerRiskService service=new CustomerRiskServiceImpl(access,properties,mapper,new CustomerRiskEvaluator(),clock);
-    @BeforeEach void setup() {when(access.resolve(eq(7L),any())).thenReturn(scope);}
+    @BeforeEach void setup() {when(access.resolveContext(eq(7L),any())).thenReturn(
+            new CustomerRiskAccessContext(7L,"SALES_STAFF",null,"SELF",CustomerQueryScopeIntent.CURRENT_AUTHORIZED,scope));}
     CustomerRiskAggregate row(long id,int days) {
         var c=new CustomerRiskAggregate();c.setId(id);c.setCustomerLevel("A");c.setCreatedAt(LocalDateTime.of(2026,10,18,12,0).minusDays(days));return c;
     }
@@ -33,7 +34,7 @@ class CustomerRiskServiceTest {
         assertThat(result.total()).isEqualTo(3);assertThat(result.items()).extracting(CustomerRiskResult::customerId).containsExactly(4L);
         assertThat(result.actualScope()).isEqualTo("SELF");assertThat(result.analysisTime().getZone()).isEqualTo(ZoneId.of("Asia/Shanghai"));
         verify(mapper).selectCandidates(scope,result.analysisTime().toLocalDateTime(),Set.of(),null,5001);
-        verify(access,times(1)).resolve(7L,CustomerQueryScopeIntent.CURRENT_AUTHORIZED);
+        verify(access,times(1)).resolveContext(7L,CustomerQueryScopeIntent.CURRENT_AUTHORIZED);
     }
     @Test void allStatesAndOffPageKeepTrueTotal() {
         when(mapper.selectCandidates(any(),any(),any(),isNull(),anyInt())).thenReturn(List.of(row(1,1),row(2,8)));
@@ -70,7 +71,7 @@ class CustomerRiskServiceTest {
         assertThat(annotation.propagation()).isEqualTo(org.springframework.transaction.annotation.Propagation.REQUIRES_NEW);
     }
     @Test void deniedAccessNeverReadsCustomers() {
-        when(access.resolve(any(),any())).thenThrow(new CustomerRiskException(CustomerRiskException.Code.ACCESS_DENIED));
+        when(access.resolveContext(any(),any())).thenThrow(new CustomerRiskException(CustomerRiskException.Code.ACCESS_DENIED));
         assertThatThrownBy(()->service.analyze(7L,CustomerRiskQuery.priority())).isInstanceOf(CustomerRiskException.class);verifyNoInteractions(mapper);
     }
 }

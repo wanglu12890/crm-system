@@ -14,6 +14,9 @@ import static org.assertj.core.api.Assertions.*;
 class CustomerRiskMapperTest {
     static Configuration configuration() throws IOException {
         var configuration = new Configuration();configuration.setMapUnderscoreToCamelCase(true);
+        try (var input = CustomerRiskMapperTest.class.getResourceAsStream("/mapper/CustomerMapper.xml")) {
+            new XMLMapperBuilder(input,configuration,"customer.xml",configuration.getSqlFragments()).parse();
+        }
         try (var input = CustomerRiskMapperTest.class.getResourceAsStream("/mapper/CustomerRiskMapper.xml")) {
             new XMLMapperBuilder(input,configuration,"risk.xml",configuration.getSqlFragments()).parse();
         }

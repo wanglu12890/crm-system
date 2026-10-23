@@ -3,7 +3,7 @@ package com.company.crm.controller;
 import com.company.crm.dto.ai.AiAnalysisRequest;
 import com.company.crm.security.SecurityUser;
 import com.company.crm.service.AiAnalysisService;
-import com.company.crm.vo.AiAnalysisVO;
+import com.company.crm.vo.ai.AiAnalysisVO;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;

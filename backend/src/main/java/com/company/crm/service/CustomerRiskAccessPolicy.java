@@ -1,6 +1,7 @@
 package com.company.crm.service;
 
 import com.company.crm.entity.SysUser;
+import com.company.crm.dto.risk.CustomerRiskAccessContext;
 import com.company.crm.enums.CustomerQueryScopeIntent;
 import com.company.crm.mapper.SysUserMapper;
 import com.company.crm.security.datascope.*;
@@ -16,6 +17,10 @@ public class CustomerRiskAccessPolicy {
     private final SysUserMapper users;
     private final DataScopeResolver scopes;
     public DataScopeContext resolve(Long userId, CustomerQueryScopeIntent requested) {
+        return resolveContext(userId, requested).effectiveScope();
+    }
+
+    public CustomerRiskAccessContext resolveContext(Long userId, CustomerQueryScopeIntent requested) {
         if (userId == null || requested == null) throw new CustomerRiskException(ACCESS_DENIED);
         SysUser user = users.selectById(userId);
         if (user == null || !userId.equals(user.getId()) || !Integer.valueOf(1).equals(user.getStatus())
@@ -36,9 +41,13 @@ public class CustomerRiskAccessPolicy {
         if (granted == null || granted.getScope() != expected || !userId.equals(granted.getUserId())
                 || (expected == DataScopeType.DEPT && (user.getDeptId() == null || !user.getDeptId().equals(granted.getDeptId()))))
             throw new CustomerRiskException(ACCESS_DENIED);
-        if (requested == CustomerQueryScopeIntent.CURRENT_AUTHORIZED) return granted;
-        if (requested == CustomerQueryScopeIntent.SELF) return new DataScopeContext(DataScopeType.SELF, userId, null);
-        if (requested == CustomerQueryScopeIntent.DEPT && expected == DataScopeType.DEPT) return granted;
-        throw new CustomerRiskException(ACCESS_DENIED);
+        if (requested == CustomerQueryScopeIntent.CURRENT_AUTHORIZED
+                || requested == CustomerQueryScopeIntent.SELF
+                || (requested == CustomerQueryScopeIntent.DEPT && expected == DataScopeType.DEPT)) {
+            var effective = requested == CustomerQueryScopeIntent.SELF
+                    ? new DataScopeContext(DataScopeType.SELF, userId, null) : granted;
+            return new CustomerRiskAccessContext(userId, role, user.getDeptId(), granted.getScopeCode(), requested, effective);
+        }
+        throw new CustomerRiskException(CustomerRiskException.Code.SCOPE_UNSUPPORTED);
     }
 }

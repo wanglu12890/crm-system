@@ -298,7 +298,7 @@ class AiAnalysisServiceTest {
         assertThat(answer.analysisContext().timeRange()).isEqualTo(range);
         assertThat(answer.analysisContext().referenceTime()).isEqualTo(result.referenceTime());
         assertThat(answer.answer()).startsWith("本人范围内，").contains("48").doesNotContain("本部门", "999999");
-        assertThat(answer.metrics()).isEqualTo(new com.company.crm.vo.AiAnalysisVO.Metrics(48, 10, 15, 12, 8, 3));
+        assertThat(answer.metrics()).isEqualTo(new com.company.crm.vo.ai.AiAnalysisVO.Metrics(48, 10, 15, 12, 8, 3));
         if (intent.contains("DISTRIBUTION")) assertThat(answer.answer()).contains("A 级 10 个", "未评级 3 个");
         verify(statistics).getStatistics(7L, range, CustomerQueryScopeIntent.SELF);
         verifyNoMoreInteractions(statistics);

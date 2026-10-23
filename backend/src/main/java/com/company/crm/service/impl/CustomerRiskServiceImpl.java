@@ -25,7 +25,8 @@ public class CustomerRiskServiceImpl implements CustomerRiskService {
     @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ, propagation = Propagation.REQUIRES_NEW)
     public CustomerRiskPage analyze(Long authenticatedUserId, CustomerRiskQuery query) {
         if (query == null) throw new CustomerRiskException(INVALID_QUERY);
-        var scope = access.resolve(authenticatedUserId,query.scope());
+        var context = access.resolveContext(authenticatedUserId,query.scope());
+        var scope = context.effectiveScope();
         var rules = properties.snapshot();
         var time = ZonedDateTime.now(businessClock).withZoneSameInstant(BUSINESS_ZONE);
         var rows = mapper.selectCandidates(scope,time.toLocalDateTime(),query.levels(),query.customerId(),rules.maxCandidates()+1);
@@ -44,6 +45,6 @@ public class CustomerRiskServiceImpl implements CustomerRiskService {
         long start = (long)(query.page()-1)*query.size();
         int from = (int)Math.min(start,results.size());
         int to = Math.min(from+query.size(),results.size());
-        return new CustomerRiskPage(results.subList(from,to),results.size(),query.page(),query.size(),scope.getScopeCode(),rules.version(),time);
+        return new CustomerRiskPage(results.subList(from,to),results.size(),query.page(),query.size(),scope.getScopeCode(),rules.version(),time,context);
     }
 }

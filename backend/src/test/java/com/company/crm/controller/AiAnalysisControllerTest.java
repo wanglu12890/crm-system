@@ -12,7 +12,7 @@ import com.company.crm.security.RestAccessDeniedHandler;
 import com.company.crm.security.RestAuthenticationEntryPoint;
 import com.company.crm.security.SecurityUser;
 import com.company.crm.service.AiAnalysisService;
-import com.company.crm.vo.AiAnalysisVO;
+import com.company.crm.vo.ai.AiAnalysisVO;
 import com.company.crm.enums.CustomerAnalysisIntent;
 import com.company.crm.enums.StatisticsTimeRange;
 import com.company.crm.exception.AiModelUnavailableException;

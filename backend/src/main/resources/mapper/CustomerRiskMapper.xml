@@ -7,10 +7,11 @@
             SELECT c.id, c.customer_no, c.customer_name, c.status AS customer_status, c.customer_level, c.created_at
             FROM customer c
             JOIN sys_user owner ON owner.id = c.owner_id AND owner.deleted = 0 AND owner.status = 1
-            WHERE c.deleted = 0 AND c.owner_id IS NOT NULL AND c.status IN ('POTENTIAL','ACTIVE')
+            WHERE c.status IN ('POTENTIAL','ACTIVE')
             <choose>
-                <when test="dataScope != null and dataScope.scopeCode == 'SELF' and dataScope.userId != null">AND c.owner_id = #{dataScope.userId}</when>
-                <when test="dataScope != null and dataScope.scopeCode == 'DEPT' and dataScope.deptId != null">AND owner.dept_id = #{dataScope.deptId}</when>
+                <when test="dataScope != null and ((dataScope.scopeCode == 'SELF' and dataScope.userId != null) or (dataScope.scopeCode == 'DEPT' and dataScope.deptId != null))">
+                    AND <include refid="com.company.crm.mapper.CustomerMapper.customerVisibilityConditions"/>
+                </when>
                 <otherwise>AND 1 = 0</otherwise>
             </choose>
             <if test="customerId != null">AND c.id = #{customerId}</if>

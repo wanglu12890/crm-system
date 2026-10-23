@@ -40,7 +40,7 @@ import com.company.crm.exception.AiModelUnavailableException;
 import com.company.crm.exception.AiToolArgumentException;
 import com.company.crm.exception.AiToolInvocationException;
 import com.company.crm.exception.AiAnalysisExceptionHandler;
-import com.company.crm.vo.AiAnalysisVO;
+import com.company.crm.vo.ai.AiAnalysisVO;
 import com.company.crm.security.datascope.DataScopeResolver;
 import com.company.crm.security.datascope.DataScopeContext;
 import com.company.crm.security.datascope.DataScopeType;

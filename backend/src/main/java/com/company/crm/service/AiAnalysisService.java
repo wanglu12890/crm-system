@@ -1,6 +1,6 @@
 package com.company.crm.service;
 
-import com.company.crm.vo.AiAnalysisVO;
+import com.company.crm.vo.ai.AiAnalysisVO;
 
 public interface AiAnalysisService {
 
