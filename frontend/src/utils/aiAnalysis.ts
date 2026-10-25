@@ -1,6 +1,7 @@
 import axios from 'axios'
 import type { ApiProblemDetail } from '@/utils/request'
 import type { AiAnalysisResult, AnalysisDataScope, StatisticsTimeRange } from '@/types/aiAnalysis'
+import { AnalysisResponseError } from './aiAnalysisResponse'
 
 export const AI_ANALYSIS_PERMISSIONS = ['ai:analysis', 'customer:list'] as const
 export const scopeLabels: Record<AnalysisDataScope, string> = {
@@ -22,12 +23,25 @@ export function formatAnalysisTime(value: string | null, timezone: string): stri
 }
 
 export function analysisErrorMessage(error: unknown): string {
+  if (error instanceof AnalysisResponseError) return error.message
   if (!axios.isAxiosError<ApiProblemDetail>(error)) return '分析失败，请稍后重试。'
   const status = error.response?.status
-  if (error.response?.data?.detail) return error.response.data.detail
+  const codes: Record<string, string> = {
+    RISK_ACCESS_CONTEXT_CHANGED: '访问权限或数据范围已变化，请重新查询。',
+    RISK_ACCESS_DENIED: '当前账号无权使用客户关注分析。',
+    RISK_CUSTOMER_NOT_FOUND: '客户不存在、不可见或不适用，请重新查询。',
+    RISK_RESULT_STALE: '结果已变化，请重新查询后再操作。',
+    RISK_CUSTOMER_SELECTION_REQUIRED: '请先从风险列表中明确选择客户，再查看原因。',
+    AI_RISK_CHAT_DISABLED: '客户关注分析暂未开放。',
+    AI_MODEL_RESPONSE_INVALID: 'AI 模型响应异常，请稍后重试。'
+  }
+  const code = error.response?.data?.code
+  if (code && codes[code]) return codes[code]
+  const detail = error.response?.data?.detail
+  if (typeof detail === 'string' && detail.length <= 200 && !/sql|jdbc|exception|stacktrace|prompt|bearer|token|password|at com\\./i.test(detail)) return detail
   const messages: Record<number, string> = {
     400: '输入或参数不合法，请修改问题后重试。', 401: '登录已失效，请重新登录。',
-    403: '无权执行分析或账号数据范围配置有误。', 409: '统计工具调用异常，请重新提交完整问题。',
+    403: '无权执行分析或账号数据范围配置有误。', 404: '客户不存在、不可见或不适用。', 409: '结果已变化或工具调用冲突，请重新查询。',
     422: '当前问题或指定查询范围暂不支持，请修改问题。',
     502: 'AI 模型响应异常，请稍后重试。', 503: 'AI 服务暂时不可用，请稍后重试。',
     500: '分析服务异常，请稍后重试。'

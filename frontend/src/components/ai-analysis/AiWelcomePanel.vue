@@ -2,7 +2,7 @@
 import { Right } from '@element-plus/icons-vue'
 defineProps<{ disabled: boolean }>()
 defineEmits<{ choose: [question: string] }>()
-const questions = ['目前一共有多少客户？', '本月新增了多少客户？', '近30天客户等级分布怎么样？']
+const questions = ['目前一共有多少客户？', '本月新增了多少客户？', '近30天客户等级分布怎么样？', '本人有哪些客户需要重点关注？', '给出本人需要重点关注客户的跟进建议。']
 </script>
 
 <template>
@@ -12,7 +12,7 @@ const questions = ['目前一共有多少客户？', '本月新增了多少客�
         <path d="M16 7c-1-5-7-4-7 0-4 0-5 5-3 7-4 3-2 8 2 8-1 5 6 7 8 3V7Zm0 0c1-5 7-4 7 0 4 0 5 5 3 7 4 3 2 8-2 8 1 5-6 7-8 3M9 7v5m-3 2h5m-3 8h4m11-15v5m3 2h-5m3 8h-4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
       </svg>
       <h2>CRM AI 销售分析助手</h2>
-      <p>通过自然语言查询客户数量与等级分布</p>
+      <p>通过自然语言查询客户统计、跟进关注状态与辅助建议</p>
     </div>
     <h3>试试这些问题</h3>
     <button v-for="question in questions" :key="question" class="question-card" type="button"

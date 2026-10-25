@@ -1,9 +1,9 @@
 import request from '@/utils/request'
-import type { AiAnalysisRequest, AiAnalysisResult } from '@/types/aiAnalysis'
+import type { AiAnalysisRequest } from '@/types/aiAnalysis'
 
 export const analyzeCustomers = (data: AiAnalysisRequest, signal?: AbortSignal) =>
-  request.post<AiAnalysisResult>('/ai/analysis', data, {
-    // Two bounded backend model calls; retain the shared auth and response interceptors.
+  request.post<unknown>('/ai/analysis', data, {
+    // Keep the existing bounded UI deadline; SUGGESTIONS can use three model stages.
     timeout: 60_000,
     signal
   })

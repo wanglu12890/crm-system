@@ -11,7 +11,7 @@ defineExpose({ focus: () => input.value?.focus() })
 <template>
   <form class="chat-input" @submit.prevent="canSubmit && emit('submit')">
     <el-input ref="input" :model-value="modelValue" type="textarea" :rows="3" :maxlength="1000"
-      :disabled="busy || disabled" resize="none" aria-label="业务分析问题"
+      :disabled="disabled" resize="none" aria-label="业务分析问题"
       placeholder="请输入需要分析的业务问题..." @update:model-value="emit('update:modelValue', $event)" />
     <div class="input-footer">
       <span>分析范围由账号权限决定</span>
