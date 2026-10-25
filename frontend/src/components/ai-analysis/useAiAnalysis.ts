@@ -4,7 +4,7 @@ import { analyzeCustomers } from '@/api/aiAnalysis'
 import { useAuthStore } from '@/stores/auth'
 import { AI_ANALYSIS_PERMISSIONS, analysisErrorMessage } from '@/utils/aiAnalysis'
 import { isRiskResult, parseAnalysisResponse } from '@/utils/aiAnalysisResponse'
-import { buildPageRequest, buildReasonRequest, buildSuggestionsRequest, sameRiskQuery } from '@/utils/riskAnalysis'
+import { buildPageRequest, buildReasonRequest, buildSuggestionsRequest, buildSingleSuggestionsRequest, sameRiskQuery } from '@/utils/riskAnalysis'
 import type { AiAnalysisRequest, AnalysisExchange, AnalysisSession, RiskAnalysisResult, RiskIntent } from '@/types/aiAnalysis'
 
 type Operation = NonNullable<AnalysisExchange['operation']>
@@ -39,6 +39,10 @@ export function useAiAnalysis() {
   function operationPending(rootId: number): boolean {
     return sessions.value.some(s => s.exchanges.some(e => (e.rootId ?? e.id) === rootId && e.status === 'pending'))
   }
+  function pendingCustomers(parent: AnalysisExchange): string[] {
+    return sessions.value.flatMap(s => s.exchanges.filter(e => (e.rootId ?? e.id) === (parent.rootId ?? parent.id)
+      && e.operation === 'single-suggestions' && e.status === 'pending').map(e => e.request?.customerId ?? ''))
+  }
   function invalidateRoot(rootId: number, message: string) {
     revisions.set(rootId, (revisions.get(rootId) ?? 0) + 1)
     for (const session of sessions.value) for (const exchange of session.exchanges) {
@@ -54,7 +58,7 @@ export function useAiAnalysis() {
     securityEpoch++
     const roots = new Set<number>()
     for (const session of sessions.value) for (const e of session.exchanges)
-      if ((e.result && isRiskResult(e.result)) || ['page','reason','suggestions'].includes(e.operation ?? ''))
+      if ((e.result && isRiskResult(e.result)) || ['page','reason','suggestions','single-suggestions'].includes(e.operation ?? ''))
         roots.add(e.rootId ?? e.id)
     roots.forEach(root => invalidateRoot(root, message))
   }
@@ -62,7 +66,8 @@ export function useAiAnalysis() {
     parent?: AnalysisExchange, expected?: Expected): Promise<void> {
     if (disposed || !canAnalyze.value) return
     const rootId = parent?.rootId ?? parent?.id
-    if (parent && operationPending(rootId!)) return
+    if (parent && (operation === 'single-suggestions'
+      ? pendingCustomers(parent).includes(request.customerId!) : operationPending(rootId!))) return
     if (!parent && session.exchanges.some(e => e.status === 'pending' && e.question === request.question)) return
     const exchange: AnalysisExchange = { id: ++sequence, question: request.question, status: 'pending',
       operation, request: { ...request }, parentId: parent?.id, rootId }
@@ -118,7 +123,7 @@ export function useAiAnalysis() {
     await execute(target, { question }, 'question')
   }
   function sessionFor(parent: AnalysisExchange) { return sessions.value.find(s => s.exchanges.some(e => e.id === parent.id)) }
-  async function riskAction(parent: AnalysisExchange, operation: 'page' | 'reason' | 'suggestions',
+  async function riskAction(parent: AnalysisExchange, operation: 'page' | 'reason' | 'suggestions' | 'single-suggestions',
     args: { customerId?: string; page?: number; size?: number } = {}) {
     if (!canUseRiskActions.value || parent.invalidated || !parent.result || !isRiskResult(parent.result)) return
     const session = sessionFor(parent)
@@ -126,11 +131,14 @@ export function useAiAnalysis() {
     try {
       parent.actionError = undefined
       const result = parent.result
-      const request = operation === 'reason' ? buildReasonRequest(result, args.customerId ?? '')
+      const request = operation === 'single-suggestions' ? buildSingleSuggestionsRequest(result, args.customerId ?? '')
+        : operation === 'reason' ? buildReasonRequest(result, args.customerId ?? '')
         : operation === 'suggestions' ? buildSuggestionsRequest(result)
           : buildPageRequest(result, parent.request ?? { question: parent.question }, args.page ?? 1, args.size ?? 20)
       let expected: Expected
-      if (operation === 'reason') expected = { intent: 'RISK_REASON', query: { scopeIntent: result.normalizedQuery.scopeIntent, customerId: request.customerId! } }
+      if (operation === 'reason' || operation === 'single-suggestions') expected = {
+        intent: operation === 'reason' ? 'RISK_REASON' : 'RISK_SUGGESTIONS',
+        query: { scopeIntent: result.normalizedQuery.scopeIntent, customerId: request.customerId! } }
       else {
         if (!('queryMode' in result.normalizedQuery)) return
         expected = { intent: operation === 'suggestions' ? 'RISK_SUGGESTIONS' : result.intent,
@@ -142,6 +150,11 @@ export function useAiAnalysis() {
   async function retryExchange(exchange: AnalysisExchange) {
     if (exchange.invalidated || !exchange.request) return
     const session = sessionFor(exchange)
+    if (exchange.operation === 'single-suggestions') {
+      const parent = session?.exchanges.find(e => e.id === exchange.parentId)
+      if (parent) await riskAction(parent, 'single-suggestions', { customerId: exchange.request.customerId })
+      return
+    }
     if (session) await execute(session, exchange.request, 'retry', exchange)
   }
   async function refreshExchange(exchange: AnalysisExchange) {
@@ -161,5 +174,5 @@ export function useAiAnalysis() {
   })
   onBeforeUnmount(() => { disposed = true; controllers.forEach(controller => controller.abort()); controllers.clear() })
   return { canAnalyze, canUseRiskActions, sessions, activeId, activeSession, recentSessions, pending, composerBusy,
-    newAnalysis, submitQuestion, riskAction, retryExchange, refreshExchange, operationPending }
+    newAnalysis, submitQuestion, riskAction, retryExchange, refreshExchange, operationPending, pendingCustomers }
 }

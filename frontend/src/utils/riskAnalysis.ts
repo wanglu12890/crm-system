@@ -13,6 +13,13 @@ export function riskStatusType(record: RiskRecord): 'danger' | 'warning' | 'info
   return record.riskLevel === 'HIGH' ? 'danger' : record.riskLevel === 'MEDIUM' ? 'warning' : record.riskLevel === 'LOW' ? 'success' : 'info'
 }
 const scopeQuestion = (scope: string) => ({ SELF: '本人范围内', DEPT: '本部门范围内', CURRENT_AUTHORIZED: '当前可查看范围内' } as Record<string, string>)[scope]
+export const canSuggestCustomer = (record: RiskRecord) => record.state === 'NORMAL' && ['HIGH','MEDIUM'].includes(record.riskLevel ?? '')
+export function buildSingleSuggestionsRequest(result: RiskAnalysisResult, customerId: string): AiAnalysisRequest {
+  const record = result.records.find(record => record.customerId === customerId)
+  if (!isCustomerId(customerId) || !record || !canSuggestCustomer(record)) throw new Error('请选择当前高/中关注客户。')
+  // A list fingerprint describes the whole page, not this single customer's current facts.
+  return { question: `请为${scopeQuestion(result.normalizedQuery.scopeIntent)}我选中的单个客户生成跟进建议。`, customerId }
+}
 export function listQuery(result: RiskAnalysisResult): RiskListQuery {
   if (result.page === null || !('queryMode' in result.normalizedQuery)) throw new Error('该结果不是可分页的风险清单。')
   return result.normalizedQuery

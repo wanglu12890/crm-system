@@ -51,7 +51,7 @@ export function parseAnalysisResponse(v: unknown): AnalysisResult {
   const q = v.normalizedQuery
   if (!['CURRENT_AUTHORIZED','SELF','DEPT'].includes(String(q.scopeIntent)) || q.scopeIntent !== c.requestedScope
     || (c.effectiveScope === 'DEPT' && c.authorizedScope !== 'DEPT')) return fail()
-  if (v.intent === 'RISK_REASON') {
+  if (v.intent === 'RISK_REASON' || (v.intent === 'RISK_SUGGESTIONS' && 'customerId' in q)) {
     if (v.page !== null || !isCustomerId(q.customerId) || records.length !== 1 || ids[0] !== q.customerId) return fail()
   } else {
     if (!object(v.page) || !count(v.page.number) || v.page.number < 1 || !count(v.page.size) || v.page.size < 1 || v.page.size > 50

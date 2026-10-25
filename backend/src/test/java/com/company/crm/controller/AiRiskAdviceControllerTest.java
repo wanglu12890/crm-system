@@ -255,4 +255,135 @@ class AiRiskAdviceControllerTest {
         verify(mapper).selectVisibleCustomers(any(),eq(List.of(ID,ID+1)));
         verify(mapper).selectCandidates(any(),any(),any(),any(),anyInt());
     }
+
+    String singleRequest(String extra) { return "{\"question\":\"请为选中客户生成跟进建议\",\"customerId\":\""+ID+"\""+extra+"}"; }
+
+    @ParameterizedTest @ValueSource(strings={"SELF","MANAGER_SELF","CURRENT_AUTHORIZED","DEPT"})
+    void singleUsesTargetedQueryAndAnonymousInputIncludingManagerScopes(String selection) throws Exception {
+        String scope=selection.equals("MANAGER_SELF")?"SELF":selection;
+        if (!selection.equals("SELF")) {
+            when(users.selectRoleCodesByUserId(7L)).thenReturn(List.of("SALES_MANAGER"));
+            when(scopes.resolve(7L,"customer:list")).thenReturn(new DataScopeContext(DataScopeType.DEPT,7L,20L));
+        }
+        doReturn(text(classification("SUGGESTIONS",scope,"PRIORITY",null)),calls("getCustomerRiskAnalysis","{}",1),text(ADVICE))
+            .when(model).call(any(Prompt.class));
+        // The target need not be present in any list page; only an explicit ID query can return it.
+        when(mapper.selectCandidates(any(),any(),any(),any(),anyInt())).thenAnswer(i ->
+            Long.valueOf(ID).equals(i.getArgument(3)) ? List.of(row(ID,20)) : List.of());
+        var body=ok(singleRequest(""));
+        assertThat(body.at("/intent").asText()).isEqualTo("RISK_SUGGESTIONS");
+        assertThat(body.get("page").isNull()).isTrue();
+        assertThat(body.at("/normalizedQuery/customerId").asText()).isEqualTo(Long.toString(ID));
+        assertThat(body.at("/records").size()).isEqualTo(1);
+        assertThat(body.at("/advice/status").asText()).isEqualTo("AVAILABLE");
+        assertThat(body.at("/advice/items").size()).isEqualTo(1);
+        assertThat(body.at("/advice/items/0/customerId").asText()).isEqualTo(Long.toString(ID));
+        assertThat(body.at("/analysisContext/effectiveScope").asText()).isEqualTo(scope.equals("SELF")?"SELF":"DEPT");
+        verify(mapper,times(2)).selectCandidates(any(),any(),eq(Set.of()),eq(ID),anyInt());
+        verify(mapper,times(2)).selectVisibleCustomers(any(),eq(List.of(ID)));
+        var capture=org.mockito.ArgumentCaptor.forClass(Prompt.class);
+        verify(model,times(3)).call(capture.capture());
+        String payload=capture.getAllValues().get(2).getInstructions().get(1).getText();
+        assertThat(json.readTree(payload).at("/customers").size()).isEqualTo(1);
+        assertThat(payload).doesNotContain(Long.toString(ID),"合成客户","SALES_MANAGER","customerId","question");
+    }
+
+    @ParameterizedTest @ValueSource(strings={"\"\"","\"0\"","\"01\"","\"-1\"","\"1.0\"","\"abc\"","\"9223372036854775808\"","null","7"})
+    void singleInvalidIdsNeverQuery(String value) throws Exception {
+        adviceStages(ADVICE);
+        request("{\"question\":\"客户建议\",\"customerId\":"+value+"}").andExpect(status().isUnprocessableEntity());
+        verifyNoInteractions(mapper,adviceFactory);
+    }
+    @ParameterizedTest @ValueSource(strings={",\"page\":1",",\"size\":20",",\"riskLevel\":\"HIGH\"",",\"role\":\"SALES_STAFF\"",",\"scope\":\"SELF\""})
+    void singleRejectsPaginationFactsAndTrustedControls(String extra) throws Exception {
+        adviceStages(ADVICE);
+        request(singleRequest(extra)).andExpect(status().isUnprocessableEntity());
+        verifyNoInteractions(mapper,adviceFactory);
+    }
+    @ParameterizedTest @ValueSource(strings={"LOW","OBSERVING","DATA_REVIEW"})
+    void singleNoLongerPriorityDoesNotCallAdvice(String state) throws Exception {
+        adviceStages(ADVICE);
+        var r=row(ID,state.equals("OBSERVING")?1:20);
+        if(state.equals("LOW")) { r.setHistoryCount(1);r.setValidCount(1);r.setLastValidFollowAt(LocalDateTime.of(2026,10,24,12,0)); }
+        if(state.equals("DATA_REVIEW")) { r.setHistoryCount(1);r.setAnomalousCount(1); }
+        when(mapper.selectCandidates(any(),any(),any(),eq(ID),anyInt())).thenReturn(List.of(r));
+        var body=ok(singleRequest(""));
+        assertThat(body.at("/advice/status").asText()).isEqualTo("NOT_APPLICABLE");
+        assertThat(body.at("/records").size()).isEqualTo(1);
+        verifyNoInteractions(adviceFactory); verify(model,times(2)).call(any(Prompt.class));
+    }
+    @Test void singleMissingInvisibleOrInapplicableIsSame404() throws Exception {
+        adviceStages(ADVICE);
+        when(mapper.selectCandidates(any(),any(),any(),eq(ID),anyInt())).thenReturn(List.of());
+        request(singleRequest("")).andExpect(status().isNotFound()).andExpect(jsonPath("$.code").value("RISK_CUSTOMER_NOT_FOUND"));
+        verifyNoInteractions(adviceFactory);
+    }
+    @ParameterizedTest @ValueSource(strings={"ALL_STATES","LEVEL_FILTER","ID_CONFLICT"})
+    void singleConflictingPlansAreRejected(String conflict) throws Exception {
+        stages("SUGGESTIONS","SELF",conflict.equals("ALL_STATES")?"ALL_STATES":"PRIORITY",
+                conflict.equals("LEVEL_FILTER")?List.of("A"):null);
+        String body=conflict.equals("ID_CONFLICT")
+                ? "{\"question\":\"为客户ID: 99生成建议\",\"customerId\":\""+ID+"\"}" : singleRequest("");
+        request(body).andExpect(status().isUnprocessableEntity());
+        verifyNoInteractions(mapper,adviceFactory);
+    }
+    @Test void singleModelFailureDoesNotHideChangedFacts() throws Exception {
+        doReturn(text(classification("SUGGESTIONS","SELF","PRIORITY",null)),calls("getCustomerRiskAnalysis","{}",1))
+            .doThrow(new IllegalStateException("synthetic")).when(model).call(any(Prompt.class));
+        when(mapper.selectCandidates(any(),any(),any(),eq(ID),anyInt())).thenReturn(List.of(row(ID,20)),List.of(row(ID,1)));
+        request(singleRequest("")).andExpect(status().isConflict()).andExpect(jsonPath("$.advice").doesNotExist());
+    }
+    @ParameterizedTest @ValueSource(strings={"SUPER_ADMIN","SYSTEM_ADMIN","MULTI","MISSING_PERMISSION"})
+    void singleAdmissionFailsClosed(String kind) throws Exception {
+        adviceStages(ADVICE);
+        if(kind.equals("MISSING_PERMISSION")) when(users.selectPermissionCodesByUserId(7L)).thenReturn(List.of("ai:analysis","customer:list"));
+        else when(users.selectRoleCodesByUserId(7L)).thenReturn(kind.equals("MULTI")?List.of("SALES_STAFF","SALES_MANAGER"):List.of(kind));
+        request(singleRequest("")).andExpect(status().isForbidden());
+        verifyNoInteractions(mapper,adviceFactory);
+    }
+    @ParameterizedTest @ValueSource(strings={"PERMISSION","ROLE","DEPARTMENT","SCOPE"})
+    void singleRevocationDuringAdviceCannotDegrade(String kind) throws Exception {
+        doReturn(text(classification("SUGGESTIONS","SELF","PRIORITY",null)),calls("getCustomerRiskAnalysis","{}",1))
+            .doAnswer(i->{ change(kind);throw new IllegalStateException("synthetic"); }).when(model).call(any(Prompt.class));
+        request(singleRequest("")).andExpect(status().isForbidden()).andExpect(jsonPath("$.records").doesNotExist());
+    }
+    @ParameterizedTest @ValueSource(strings={"OWNER","MISSING","FACTS","TIME"})
+    void singleChangesAfterModelReturn409(String kind) throws Exception {
+        adviceStages(ADVICE);
+        if(kind.equals("OWNER")) doReturn(List.of(new CustomerRiskVisibility(ID,7L,20L,"ACTIVE")),
+            List.of(new CustomerRiskVisibility(ID,8L,20L,"ACTIVE"))).when(mapper).selectVisibleCustomers(any(),any());
+        if(kind.equals("MISSING")) when(mapper.selectCandidates(any(),any(),any(),eq(ID),anyInt()))
+            .thenReturn(List.of(row(ID,20)),List.of());
+        if(kind.equals("FACTS")) when(mapper.selectCandidates(any(),any(),any(),eq(ID),anyInt()))
+            .thenReturn(List.of(row(ID,20)),List.of(row(ID,1)));
+        if(kind.equals("TIME")) when(businessClock.instant()).thenReturn(Instant.parse("2026-10-24T04:00:00Z"),Instant.parse("2026-10-26T04:00:00Z"));
+        request(singleRequest("")).andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("RISK_RESULT_STALE"))
+            .andExpect(jsonPath("$.records").doesNotExist());
+    }
+    @ParameterizedTest @ValueSource(strings={"not-json","{\"items\":[]}","BAD_ACTION","BAD_REASON","BAD_ALIAS","TIMEOUT"})
+    void singleModelFailuresPreserveFactsAndRecheck(String kind) throws Exception {
+        String output=switch(kind) { case "BAD_ACTION"->ADVICE.replace("VERIFY_CURRENT_NEEDS","AUTO_SEND");
+            case "BAD_REASON"->ADVICE.replace("NEVER_FOLLOWED","FOLLOW_GAP");case "BAD_ALIAS"->ADVICE.replace("r1","r2");default->kind;};
+        adviceStages(output);
+        if(kind.equals("TIMEOUT")) doReturn(text(classification("SUGGESTIONS","SELF","PRIORITY",null)),calls("getCustomerRiskAnalysis","{}",1))
+            .doThrow(new org.springframework.web.client.ResourceAccessException("synthetic timeout")).when(model).call(any(Prompt.class));
+        var body=ok(singleRequest(""));
+        assertThat(body.at("/status").asText()).isEqualTo("PARTIAL");
+        assertThat(body.at("/advice/status").asText()).isEqualTo("UNAVAILABLE");
+        assertThat(body.at("/records/0/customerId").asText()).isEqualTo(Long.toString(ID));
+        verify(mapper,times(2)).selectCandidates(any(),any(),any(),eq(ID),anyInt());
+    }
+    @Test void singleFingerprintIsNotAListFingerprintAndIsNeverIgnored() throws Exception {
+        stages("REASON","SELF","PRIORITY",null);
+        var single=ok("{\"question\":\"原因\",\"customerId\":\""+ID+"\"}");
+        adviceStages(ADVICE);
+        var result=ok(singleRequest(",\"expectedResultFingerprint\":\""+single.get("resultFingerprint").asText()+"\""));
+        assertThat(result.get("resultFingerprint")).isEqualTo(single.get("resultFingerprint"));
+        stages("LIST","SELF","PRIORITY",null);
+        var list=ok("{\"question\":\"清单\"}");
+        adviceStages(ADVICE);clearInvocations(adviceFactory);
+        request(singleRequest(",\"expectedResultFingerprint\":\""+list.get("resultFingerprint").asText()+"\""))
+            .andExpect(status().isConflict());
+        verifyNoInteractions(adviceFactory);
+    }
 }

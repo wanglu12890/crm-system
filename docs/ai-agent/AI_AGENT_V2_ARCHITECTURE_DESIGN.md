@@ -1,8 +1,8 @@
 # CRM AI Agent V2-D1：后端架构与接口设计
 
-- 初版：2026-10-18；更新：2026-10-25。状态：S1/S2-A、B1统一入口、B2风险Tool、B3受约束建议及B4前端集成已有实现；风险聊天仍默认关闭。B4离线验证已完成，真实环境联调与端到端耗时尚待验收，见[B4报告](AI_AGENT_V2_S2_B4_IMPLEMENTATION_REPORT.md)。
+- 初版：2026-10-18；更新：2026-10-25。状态：S1/S2-A、B1统一入口、B2风险Tool、B3受约束建议、B4前端集成及B5单客户建议已有实现；风险聊天仍默认关闭。B5真实环境验收见[B5报告](AI_AGENT_V2_S2_B5_IMPLEMENTATION_REPORT.md)，B4阶段记录保留在[B4报告](AI_AGENT_V2_S2_B4_IMPLEMENTATION_REPORT.md)。
 - 业务依据：[V2.0正式PRD](AI_AGENT_V2_REQUIREMENTS.md)、[R1可行性报告](AI_AGENT_V2_FEASIBILITY_REPORT.md)、[D1任务](../../task/1018/2-CRM-AI-Agent-V2-D1.md)。PRD的角色、三权限、状态、阈值、排序和20/50分页已冻结，本设计不重新裁决业务规则。
-- 当前实施依据见归档的[B1报告](../historical/AI_AGENT_V2_S2_B1_IMPLEMENTATION_REPORT.md)、[B2报告](../historical/AI_AGENT_V2_S2_B2_IMPLEMENTATION_REPORT.md)、[B3报告](../historical/AI_AGENT_V2_S2_B3_IMPLEMENTATION_REPORT.md)。报告保留各阶段当时的测试、决策和限制；本设计文档描述当前B1/B2/B3实现及B4待办，不把历史阶段的未就绪状态当作当前开启开关后的行为。
+- 当前实施依据见归档的[B1报告](../historical/AI_AGENT_V2_S2_B1_IMPLEMENTATION_REPORT.md)、[B2报告](../historical/AI_AGENT_V2_S2_B2_IMPLEMENTATION_REPORT.md)、[B3报告](../historical/AI_AGENT_V2_S2_B3_IMPLEMENTATION_REPORT.md)及当前B4/B5报告。报告保留各阶段当时的测试、决策和限制；本设计文档描述当前实现，不把历史阶段的未就绪状态当作当前开启开关后的行为。
 
 ## 1. 设计目标与范围
 
@@ -200,7 +200,7 @@ Controller内部路径省略/api前缀。保留两个已存在的只读入口，
 | AiAnalysisRequest | question；风险可选page、size、customerId、expectedResultFingerprint | 保留question非空白≤1000及V1额外字段忽略；风险分支严格白名单，REASON只允许字符串customerId，清单默认1/20，指纹只供SUGGESTIONS使用 |
 | CustomerRiskRequest | action、scopeIntent、queryMode、customerLevels、page、size、customerId、expectedResultFingerprint | action=LIST/REASON/SUGGESTIONS；scope默认CURRENT_AUTHORIZED，仅SELF/DEPT显式；queryMode默认PRIORITY或ALL_STATES；等级集合只含A/B/C/D/UNRATED，空数组非法，null或省略表示不限等级 |
 
-操作条件：LIST/SUGGESTIONS禁止customerId；REASON必须customerId且不接受queryMode/customerLevels/page/size/指纹，不因默认PRIORITY而屏蔽低关注或特殊状态原因。SUGGESTIONS指定规范清单条件重新计算当前页，不能上传上一页的客户数组、等级、原因或模型事实。expectedResultFingerprint仅允许SUGGESTIONS，可用于旧页提示；默认空，不作为权限凭据。
+结构化S2-A操作条件保持不变：LIST/SUGGESTIONS禁止customerId；REASON必须customerId且不接受queryMode/customerLevels/page/size/指纹，不因默认PRIORITY而屏蔽低关注或特殊状态原因。批量SUGGESTIONS指定规范清单条件重新计算当前页，不能上传上一页的客户数组、等级、原因或模型事实。统一聊天B5允许SUGGESTIONS显式customerId，详见10.5；expectedResultFingerprint仅允许SUGGESTIONS，单客户严格比较单客户摘要而非整页摘要，默认空，不作为权限凭据。
 
 先按操作检查显式字段，再只给LIST/SUGGESTIONS应用分页/模式默认值；自然语言请求在分类完成后做同样检查，不把自动补出的1/20误当REASON非法输入，也不静默忽略客户端真传的额外条件。指纹为非空、至多128字符的比较值（可省略），服务器输出规范摘要；不把用户提交的任意字符串解析为快照或授权。
 
@@ -216,8 +216,8 @@ Controller内部路径省略/api前缀。保留两个已存在的只读入口，
 |---|---|
 | RiskAnalysisVO | status=SUCCESS/PARTIAL、intent=RISK_LIST/RISK_REASON/RISK_SUGGESTIONS、answer（Java生成）、analysisContext、normalizedQuery、page、records、resultFingerprint、advice |
 | analysisContext | authorizedScope、effectiveScope、requestedScope、analysisTime（+08:00 ISO）、timezone=Asia/Shanghai、ruleVersion、consistency=LIVE_REQUEST_SNAPSHOT；不返回操作者/部门ID |
-| normalizedQuery | LIST/SUGGESTIONS为scopeIntent/queryMode/customerLevels/page/size；REASON为scopeIntent/customerId；由Java归一化，可作为下次请求语义，不是可信执行上下文 |
-| page | number、size、returned、total、pages；total为本次筛选去重后的匹配客户数，returned为当前页数；REASON时page=null |
+| normalizedQuery | LIST/批量SUGGESTIONS为scopeIntent/queryMode/customerLevels/page/size；REASON及B5单客户SUGGESTIONS为scopeIntent/customerId；由Java归一化，不是可信执行上下文 |
+| page | number、size、returned、total、pages；total为本次筛选去重后的匹配客户数，returned为当前页数；REASON及B5单客户SUGGESTIONS时page=null |
 | records[] | customerId、customerNo、customerName、customerLevel（A/B/C/D/null）、customerStatus、state、riskLevel、historyStatus、lastValidFollowAt、anchorType、elapsedDays、thresholdDays、excessDays、reasons、dataQuality |
 | reasons[] | code、message（Java）、evidence{anchorTime,elapsedDays,thresholdDays,levelGroup}；levelGroup=A/OTHER/NEVER，不能冒充另一个独立风险 |
 | dataQuality | status=CLEAN/HAS_ANOMALIES、codes[]；不含原始跟进正文或跨客户ID |
@@ -375,11 +375,24 @@ CustomerRiskAdviceAccessVerifier在建议前后各开一个REQUIRES_NEW只读短
 
 AiAnalysis.vue继续使用原会话、输入和统计结果组件。所有自然语言输入和翻页均由同一API模块请求POST /api/ai/analysis，不调用CustomerRiskController或Qwen。按后端intent校验并渲染统计/风险联合响应，不在前端识别自然语言关键词决定业务类型。RiskAnalysisResult展示记录、时间、实际范围、分页及Java原因；RiskAdvicePanel按AVAILABLE/UNAVAILABLE/NOT_APPLICABLE展示模板建议、降级或空页，并保留人工核实提示。
 
-卡片“查看判定依据”仅在本地逐卡展开已有风险证据，不发请求或新增消息；新结果重置展开状态，失效结果移除证据。后端REASON及显式customerId合同保留，页面不再由卡片触发。根据B4收尾任务提供的真实观察，批量建议10条成功、20/50条出现UNAVAILABLE；暂时隐藏当前页批量建议按钮，保留自然语言SUGGESTIONS和历史建议展示，单客户建议留待S2-B5。本轮未重测真实模型，也未调整后端约束。翻页保留来源请求的原问题，只传新page/size，不带旧页指纹，也不上传可信scope、queryMode、身份或阈值；原问题请求建议时仍保留其语义。返回的intent/规范条件与关联操作不一致时拒绝当作同条件成功；每次翻页重新查询，不承诺稳定跨页快照。
+卡片“查看判定依据”仅在本地逐卡展开已有风险证据，不发请求或新增消息；新结果重置展开状态，失效结果移除证据。后端REASON及显式customerId合同保留，页面不再由卡片触发。根据B4收尾任务提供的真实观察，批量建议10条成功、20/50条出现UNAVAILABLE；当前页批量建议按钮保持隐藏，保留自然语言SUGGESTIONS和历史建议展示，B5单客户建议见下节。未调整后端批量约束。翻页保留来源请求的原问题，只传新page/size，不带旧页指纹，也不上传可信scope、queryMode、身份或阈值；原问题请求建议时仍保留其语义。返回的intent/规范条件与关联操作不一致时拒绝当作同条件成功；每次翻页重新查询，不承诺稳定跨页快照。
 
 消息与关联操作各自保存请求、响应、耗时和状态；独立问题可并发，重复问题及同一关联风险操作进行中禁止重复提交。AbortController在卸载时取消请求，并通过会话绑定、身份/风险失效代次阻止迟到结果回填。401/403隐藏受保护的旧风险结果；404或RISK_RESULT_STALE隐藏相关消息链，保留不相关统计历史；重新查询原问题创建新消息，不继续使用失效客户选择。前端权限工具仅控制风险按钮展示，最终授权仍在后端。
 
 前端类型、必要字段/字符串ID/分页/建议客户引用均有运行时校验；未知关注状态以中性提示显示，未知或不合法建议项安全降级，不当作高关注或可执行操作。未引入第二套聊天页面、状态框架或自动业务写入。Axios AI超时仍60秒，显示加载和实际本次请求耗时，超时允许显式重试；没有通过放大超时掩盖性能问题。真实浏览器+Qwen+专用MySQL的联调数据尚未取得，不能把SSR/Mock测试耗时称为生产端到端耗时。
+
+
+### 10.5 B5 单客户 AI 跟进建议
+
+统一聊天在可信Router判为SUGGESTIONS后，以显式customerId区分单客户和原批量协议。ID必须为正整数规范十进制字符串且不超过Long.MAX_VALUE。单客户只允许customerId及可选expectedResultFingerprint，不接受page/size、前端事实或可信范围；模式必须PRIORITY、等级筛选为空。LIST带ID仍拒绝，REASON原合同不变，结构化S2-A不扩展。
+
+单客户复用REASON底层CustomerRiskQuery与参数化按ID查询，不查列表第一页或遍历所有客户。返回RISK_SUGGESTIONS，normalizedQuery={scopeIntent,customerId}、page=null、records恰好一条。只有当前NORMAL且HIGH/MEDIUM进入B3匿名输入、严格JSON/动作/原因校验和Java模板；LOW/OBSERVING/DATA_REVIEW保留事实并返回SUCCESS/NOT_APPLICABLE，不调用建议模型。不存在、不可见、不适用对象统一404。
+
+原三权限、单销售角色与DEPT/SELF准入及建议前后可见性检查不变。单客户在模型返回后（包括建议降级）额外执行一次按ID风险事实查询，复用Assembler单客户指纹比较；事实/规则变化或对象消失返回409，权限/上下文变化403，不降级为UNAVAILABLE。初次Tool仍仅执行一次，批量流程保持一次核心聚合；单客户为一次定向初查加一次定向事实复核，而非额外整页聚合。所有模型等待均在短事务之外，采样检查仍存在最终检查后的TOCTOU边界。
+
+沿用原摘要算法，单客户摘要按ReasonQuery、单条记录及total=1计算，不含分析时间；可选预期摘要严格比较，不匹配409。整页摘要不能用于单客户；前端卡片请求不携带来源整页指纹，只提交描述范围语义的question及真实字符串customerId。
+
+高/中关注卡片提供“获取跟进建议”，创建关联消息并严格核对单客户查询及记录ID；RiskAdvicePanel复用现有展示。请求按来源消息链和客户ID去重，不同客户可并发、乱序回填各自消息，失败允许显式重试；403/404/409使相关旧事实/建议失效。批量按钮继续隐藏，本地判定依据、V1统计和批量自然语言建议保留。B3超时、并发、白名单及Prompt不变；真实Qwen/MySQL结果与耗时必须另行验收。
 
 ## 11. 分页、性能、一致性与异常
 
@@ -399,7 +412,7 @@ AiAnalysis.vue继续使用原会话、输入和统计结果组件。所有自然
 |---|---|---|
 | page/size | 默认1/20，size≤50；无动态sort、任意ID数组 | S2-A非法格式/边界400；自然语言风险查询计划非法422；不静默裁剪 |
 | 授权客户聚合 | 默认maxCandidates=5000，cap+1检测，历史不截断；单原因只查目标客户 | 超容量503/RISK_CAPACITY_EXCEEDED，禁止返回不完整总量 |
-| SQL | 参数化，一次核心聚合，建议前后各一次当前页批量复核；聚合SQL timeout=10秒，批量复核SQL timeout=3秒 | 查询失败整体拒绝，不用空页或PARTIAL替代；驱动及真实执行时限需实测 |
+| SQL | 参数化，批量一次核心聚合；B5单客户初查及模型后复核各一次定向查询；建议前后各一次对象复核；聚合SQL timeout=10秒，对象复核SQL timeout=3秒 | 查询失败整体拒绝，不用空页或PARTIAL替代；驱动及真实执行时限需实测 |
 | 建议模型 | 默认最多50客户；Prompt加输入≤12000 UTF-8字节；提供方输出≤4000 token且Java校验≤24000字符，每客户1–3动作 | 超预算整页UNAVAILABLE，不隐式截断、拆批或重试 |
 | 模型阶段 | 分类/Tool客户端连接5秒、读取20秒；建议独立连接2秒、读取至多8秒；风险建议最多3次模型，S2-A为0次 | 分类/Tool失败503；建议阶段失败降级，授权失败整体拒绝 |
 | 总预算与并发 | 统一入口记录55秒软预算，建议按剩余预算准入；建议单JVM并发默认4、不排队；前端AI超时仍60秒 | 建议忙或预算不足返回200/PARTIAL/UNAVAILABLE，不是已实现HTTP 429或硬截止时间 |
@@ -477,6 +490,7 @@ S4需准备授权测试环境的异常/交接/排序样本；本次不插入或�
 | V2-S2-B2 | 内部风险编排、零参数风险Tool/Factory、可信计划、上下文与对象复核、复用映射/指纹 | 仅合法分支注册Tool，最多一次风险聚合；无独立聊天Controller |
 | V2-S2-B3 | 已实现受约束Qwen建议、单机预算/并发保护、建议失败降级 | 合法核心结果保留；权限失败不可PARTIAL；S2-A仍保持建议未就绪，不自动接入模型 |
 | V2-S2-B4 | 已实现统一聊天前端按intent渲染统计/风险，分页、原因、建议、部分成功与指纹提示 | 离线测试/类型检查/构建已通过；不以隐藏按钮代替授权，真实环境联合端到端验收仍待执行 |
+| V2-S2-B5 | 已实现单客户SUGGESTIONS、定向查询和模型后事实复核、卡片关联建议 | 离线回归见B5报告；真实联合验收单独记录 |
 | V2-S4（后续） | 授权环境真实MySQL/Qwen/浏览器与性能验收 | 独立SQL、边界数据、模型/界面证据、容量/超时达标后才称V2验收 |
 
 S1/S2-A不能把后续模型未接入包装成全功能完成；结构化SUGGESTIONS若在S2-A暴露，仍须先计算可信结果后返回advice.UNAVAILABLE/RISK_ADVICE_NOT_READY，而非200假建议或丢弃核心结果。每阶段遵循最小回归，出现必须修改冻结业务规则时停止对应实现并报告。

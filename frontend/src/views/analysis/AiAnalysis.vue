@@ -10,7 +10,7 @@ import AiAnalysisResult from '@/components/ai-analysis/AiAnalysisResult.vue'
 import RiskAnalysisResult from '@/components/ai-analysis/RiskAnalysisResult.vue'
 
 const { canAnalyze, canUseRiskActions, sessions, activeId, activeSession, recentSessions, pending, composerBusy,
-  newAnalysis, submitQuestion, riskAction, retryExchange, refreshExchange, operationPending } = useAiAnalysis()
+  newAnalysis, submitQuestion, riskAction, retryExchange, refreshExchange, operationPending, pendingCustomers } = useAiAnalysis()
 const composer = ref<InstanceType<typeof AiChatInput>>()
 const messages = ref<HTMLElement>()
 async function chooseQuestion(question: string) {
@@ -37,16 +37,17 @@ watch(() => [activeId.value, activeSession.value.exchanges.map(exchange => excha
             <h2 class="session-title">{{ activeSession.title }}</h2>
             <article v-for="exchange in activeSession.exchanges" :key="exchange.id" :id="`analysis-message-${exchange.id}`" class="exchange">
               <p class="user-message">{{ exchange.question }}</p>
-              <p v-if="exchange.parentId" class="related-message">关联消息 #{{ exchange.parentId }} · {{ exchange.operation === 'reason' ? '客户原因' : exchange.operation === 'page' ? '重新查询分页' : exchange.operation === 'suggestions' ? '当前页建议' : '重新请求' }}</p>
+              <p v-if="exchange.parentId" class="related-message">关联消息 #{{ exchange.parentId }} · {{ exchange.operation === 'single-suggestions' ? '单客户跟进建议' : exchange.operation === 'reason' ? '客户原因' : exchange.operation === 'page' ? '重新查询分页' : exchange.operation === 'suggestions' ? '当前页建议' : '重新请求' }}</p>
               <div class="assistant-message">
                 <div class="assistant-heading"><el-icon><ChatDotRound /></el-icon><span>CRM AI 销售分析助手</span></div>
                 <p v-if="exchange.status === 'pending'" class="loading-state" role="status"><el-icon class="is-loading"><Loading /></el-icon>正在分析，请稍候…建议分析可能包含多个处理阶段，最长等待约 60 秒。</p>
                 <el-alert v-else-if="exchange.status === 'error'" :title="exchange.error" type="error" :closable="false" show-icon class="error-state" />
-                <RiskAnalysisResult v-else-if="exchange.result && isRiskResult(exchange.result)" :result="exchange.result"
+                <RiskAnalysisResult v-else-if="exchange.result && isRiskResult(exchange.result)" :result="exchange.result" :request="exchange.request"
                   :can-act="canUseRiskActions" :busy="operationPending(exchange.rootId ?? exchange.id)" :action-error="exchange.actionError"
+                  :pending-customers="pendingCustomers(exchange)" @single-suggestions="riskAction(exchange, 'single-suggestions', { customerId: $event })"
                   @page="(page, size) => riskAction(exchange, 'page', { page, size })" />
                 <AiAnalysisResult v-else-if="exchange.result && !isRiskResult(exchange.result)" :question="exchange.question" :result="exchange.result" />
-                <el-button v-if="exchange.status === 'error'" class="retry-button" size="small"
+                <el-button v-if="exchange.status === 'error' || (exchange.operation === 'single-suggestions' && exchange.result && isRiskResult(exchange.result) && exchange.result.advice.status === 'UNAVAILABLE')" class="retry-button" size="small"
                   :disabled="operationPending(exchange.rootId ?? exchange.id)"
                   @click="exchange.invalidated ? refreshExchange(exchange) : retryExchange(exchange)">
                   {{ exchange.invalidated ? '重新查询原问题' : '重试' }}

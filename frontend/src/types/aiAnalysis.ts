@@ -39,7 +39,7 @@ export interface AnalysisExchange {
   request?: AiAnalysisRequest
   parentId?: number
   rootId?: number
-  operation?: 'question' | 'page' | 'reason' | 'suggestions' | 'retry'
+  operation?: 'question' | 'page' | 'reason' | 'suggestions' | 'single-suggestions' | 'retry'
   invalidated?: boolean
   elapsedMs?: number
   actionError?: string

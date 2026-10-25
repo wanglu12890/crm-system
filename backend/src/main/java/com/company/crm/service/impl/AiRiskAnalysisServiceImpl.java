@@ -31,6 +31,7 @@ public class AiRiskAnalysisServiceImpl implements AiRiskAnalysisService {
     private final CustomerRiskAccessPolicy access;
     private final CustomerRiskToolFactory factory;
     private final CustomerRiskResponseAssembler assembler;
+    private final CustomerRiskService risks;
     private final String toolPrompt;
     private final RiskAdviceService advice;
     private final CustomerRiskAdviceAccessVerifier verifier;
@@ -40,10 +41,11 @@ public class AiRiskAnalysisServiceImpl implements AiRiskAnalysisService {
 
     public AiRiskAnalysisServiceImpl(@Qualifier("qwenChatClient") ObjectProvider<ChatClient> clients,
             ObjectMapper mapper, CustomerRiskAccessPolicy access, CustomerRiskToolFactory factory,
-            CustomerRiskResponseAssembler assembler,
+            CustomerRiskResponseAssembler assembler, CustomerRiskService risks,
             @Value("classpath:prompts/customer-risk-tool.st") Resource prompt, RiskAdviceService advice,
             CustomerRiskAdviceAccessVerifier verifier, com.company.crm.config.RiskAdviceProperties adviceLimits) throws java.io.IOException {
         this.clients = clients; this.mapper = mapper; this.access = access; this.factory = factory; this.assembler = assembler;
+        this.risks = risks;
         this.toolPrompt = prompt.getContentAsString(StandardCharsets.UTF_8);
         this.advice = advice; this.verifier = verifier; this.adviceLimits = adviceLimits;
     }
@@ -76,7 +78,10 @@ public class AiRiskAnalysisServiceImpl implements AiRiskAnalysisService {
             if (calls.size() != 1 || !"function".equals(calls.get(0).type())
                     || !"getCustomerRiskAnalysis".equals(calls.get(0).name())) throw new AiAnalysisProtocolException();
             requireEmptyArguments(calls.get(0).arguments());
+            long queryStarted = System.nanoTime();
             var page = tool.getCustomerRiskAnalysis();
+            log.info("AI risk query finished, single={}, elapsedMs={}", validated.query().customerId() != null,
+                    (System.nanoTime() - queryStarted) / 1_000_000);
             if (!CustomerRiskAccessPolicy.sameContext(context, page.accessContext())
                     || !context.effectiveScope().getScopeCode().equals(page.actualScope())
                     || page.page() != validated.query().page() || page.size() != validated.query().size()
@@ -85,7 +90,7 @@ public class AiRiskAnalysisServiceImpl implements AiRiskAnalysisService {
                 throw new AiAnalysisProtocolException();
             var base = assembler.assemble(userId, validated, page); // Includes expected fingerprint check before sending facts.
             if (candidate.riskIntent() != AiAnalysisPlan.RiskIntent.SUGGESTIONS) return base;
-            return appendAdvice(base, page, startedNanos);
+            return appendAdvice(base, page, validated, startedNanos);
         } catch (RuntimeException exception) {
             // Business/query failures are logged by the shared advice; record model-stage failures here only.
             if (exception instanceof AiAnalysisProtocolException || exception instanceof AiModelUnavailableException
@@ -98,10 +103,17 @@ public class AiRiskAnalysisServiceImpl implements AiRiskAnalysisService {
         }
     }
 
-    private RiskAnalysisVO appendAdvice(RiskAnalysisVO base, CustomerRiskPage page, long startedNanos) {
+    private RiskAnalysisVO appendAdvice(RiskAnalysisVO base, CustomerRiskPage page, CustomerRiskRequest request, long startedNanos) {
         var ids = page.items().stream().map(CustomerRiskResult::customerId).toList();
         var visible = verifier.verify(page.accessContext(), ids);
         if (ids.isEmpty()) return base;
+        boolean single = request.query().customerId() != null;
+        if (single && !priority(page.items().get(0))) {
+            verifier.verify(page.accessContext(), ids, visible);
+            return new RiskAnalysisVO("SUCCESS", base.intent(), base.answer(), base.analysisContext(), base.normalizedQuery(),
+                    null, base.records(), base.resultFingerprint(), new RiskAnalysisVO.Advice("NOT_APPLICABLE", null, null,
+                    "当前客户不属于高/中关注，无需生成跟进建议。", List.of()));
+        }
         RiskAnalysisVO.Advice generated;
         try {
             long remaining = adviceLimits.getRequestBudgetMillis() - (System.nanoTime() - startedNanos) / 1_000_000;
@@ -129,17 +141,37 @@ public class AiRiskAnalysisServiceImpl implements AiRiskAnalysisService {
         }
         // Always recheck, including model failures; access failures must not be swallowed as PARTIAL.
         verifier.verify(page.accessContext(), ids, visible);
+        if (single) {
+            // A fresh targeted fact check, never a second Tool invocation or a whole-list scan.
+            // Security failures deliberately remain outside the model-degradation catch.
+            try {
+                long recheckStarted = System.nanoTime();
+                var current = risks.analyze(page.accessContext().userId(), request.query(), page.accessContext());
+                assembler.assemble(page.accessContext().userId(),
+                        new CustomerRiskRequest(request.action(), request.query(), base.resultFingerprint()), current);
+                log.info("Single risk advice facts rechecked, elapsedMs={}", (System.nanoTime() - recheckStarted) / 1_000_000);
+            } catch (CustomerRiskException exception) {
+                if (exception.getCode() == NOT_FOUND) throw new CustomerRiskException(RESULT_STALE);
+                throw exception;
+            }
+        }
         return new RiskAnalysisVO("AVAILABLE".equals(generated.status()) ? "SUCCESS" : "PARTIAL", base.intent(),
                 base.answer(), base.analysisContext(), base.normalizedQuery(), base.page(), base.records(),
                 base.resultFingerprint(), generated);
+    }
+
+    private boolean priority(CustomerRiskResult item) {
+        return item.state() == CustomerRiskResult.State.NORMAL
+                && (item.riskLevel() == CustomerRiskResult.Level.HIGH || item.riskLevel() == CustomerRiskResult.Level.MEDIUM);
     }
 
     private CustomerRiskRequest plan(AiAnalysisPlan.Risk candidate, AiAnalysisRequest request) {
         var fields = request.interaction();
         if (!INTERACTION.containsAll(fields.keySet())) throw new CustomerRiskException(QUERY_UNSUPPORTED);
         boolean reason = candidate.riskIntent() == AiAnalysisPlan.RiskIntent.REASON;
+        boolean single = candidate.riskIntent() == AiAnalysisPlan.RiskIntent.SUGGESTIONS && fields.containsKey("customerId");
         Long id = null;
-        if (reason) {
+        if (reason || single) {
             if (!fields.containsKey("customerId")) throw new CustomerRiskException(CUSTOMER_SELECTION_REQUIRED);
             var value = fields.get("customerId");
             if (!value.isTextual() || !value.textValue().matches("[1-9][0-9]{0,18}"))
@@ -149,7 +181,9 @@ public class AiRiskAnalysisServiceImpl implements AiRiskAnalysisService {
             var matches = EXPLICIT_ID.matcher(request.question());
             while (matches.find()) if (!matches.group(1).equals(value.textValue()))
                 throw new CustomerRiskException(CUSTOMER_SELECTION_REQUIRED);
-            if (fields.size() != 1 || candidate.queryMode() != CustomerRiskQuery.Mode.PRIORITY || !candidate.customerLevels().isEmpty())
+            if (!Set.of("customerId", "expectedResultFingerprint").containsAll(fields.keySet())
+                    || (reason && fields.size() != 1)
+                    || candidate.queryMode() != CustomerRiskQuery.Mode.PRIORITY || !candidate.customerLevels().isEmpty())
                 throw new CustomerRiskException(QUERY_UNSUPPORTED);
         } else if (fields.containsKey("customerId")) throw new CustomerRiskException(QUERY_UNSUPPORTED);
         String fingerprint = null;
@@ -161,7 +195,7 @@ public class AiRiskAnalysisServiceImpl implements AiRiskAnalysisService {
             fingerprint = node.textValue();
         }
         try { return new CustomerRiskRequest(CustomerRiskRequest.Action.valueOf(candidate.riskIntent().name()),
-                new CustomerRiskQuery(reason ? CustomerRiskQuery.Operation.REASON : CustomerRiskQuery.Operation.LIST,
+                new CustomerRiskQuery(reason || single ? CustomerRiskQuery.Operation.REASON : CustomerRiskQuery.Operation.LIST,
                         candidate.queryMode(), candidate.queryScopeIntent(), candidate.customerLevels(), id,
                         integer(fields, "page", 1), integer(fields, "size", 20)), fingerprint);
         } catch (CustomerRiskException exception) { throw new CustomerRiskException(QUERY_UNSUPPORTED); }
