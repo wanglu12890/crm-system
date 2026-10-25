@@ -11,6 +11,9 @@ import com.company.crm.service.AiAnalysisService;
 import com.company.crm.service.CustomerStatisticsService;
 import com.company.crm.service.CustomerAnalysisScopePolicy;
 import com.company.crm.service.impl.AiAnalysisServiceImpl;
+import com.company.crm.service.impl.AiStatisticsAnalysisServiceImpl;
+import com.company.crm.service.AiIntentRouter;
+import com.company.crm.config.AiRiskChatProperties;
 import com.company.crm.mapper.SysUserMapper;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.BeforeEach;
@@ -126,7 +129,7 @@ class QwenAnalysisLiveIntegrationTest {
         try {
             AiAnalysisVO answer = null;
             RuntimeException rejection = null;
-            try { answer = service.analyze(7L, scenario.question()); }
+            try { answer = (AiAnalysisVO) service.analyze(7L, scenario.question()); }
             catch (RuntimeException failure) { rejection = failure; }
             long executions = mockingDetails(statistics).getInvocations().size();
             assertThat(executions).isLessThanOrEqualTo(1);
@@ -227,7 +230,7 @@ class QwenAnalysisLiveIntegrationTest {
         when(statistics.getStatistics(7L, StatisticsTimeRange.CURRENT_MONTH, CustomerQueryScopeIntent.CURRENT_AUTHORIZED)).thenReturn(
                 new CustomerStatisticsResult(5, 1, 1, 1, 1, 1, "SELF", StatisticsTimeRange.CURRENT_MONTH,
                         time.withDayOfMonth(1), time.withDayOfMonth(1).plusMonths(1), time, "Asia/Shanghai"));
-        var answer = service.analyze(7L, "本月新增了多少客户？");
+        var answer = (AiAnalysisVO) service.analyze(7L, "本月新增了多少客户？");
         assertThat(answer.intent()).isEqualTo(CustomerAnalysisIntent.CUSTOMER_TOTAL);
         assertThat(answer.metrics().totalCustomers()).isEqualTo(5);
         verify(statistics).getStatistics(7L, StatisticsTimeRange.CURRENT_MONTH, CustomerQueryScopeIntent.CURRENT_AUTHORIZED);
@@ -240,8 +243,9 @@ class QwenAnalysisLiveIntegrationTest {
     @SpringBootConfiguration
     @EnableAutoConfiguration(exclude = DataSourceAutoConfiguration.class)
     @Import({AiChatClientConfig.class, AiAnalysisServiceImpl.class, CustomerStatisticsToolFactory.class,
-            CustomerAnalysisScopePolicy.class})
+            CustomerAnalysisScopePolicy.class, AiStatisticsAnalysisServiceImpl.class, AiIntentRouter.class, AiRiskChatProperties.class})
     static class TestApplication {
+        @Bean com.company.crm.service.AiRiskAnalysisService aiRiskAnalysisService() { return mock(com.company.crm.service.AiRiskAnalysisService.class); }
         @Bean CustomerStatisticsService customerStatisticsService() { return mock(CustomerStatisticsService.class); }
         @Bean DataScopeResolver dataScopeResolver() { return mock(DataScopeResolver.class); }
         @Bean SysUserMapper sysUserMapper() { return mock(SysUserMapper.class); }

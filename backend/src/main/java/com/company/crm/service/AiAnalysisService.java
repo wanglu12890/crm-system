@@ -1,8 +1,9 @@
 package com.company.crm.service;
 
-import com.company.crm.vo.ai.AiAnalysisVO;
+import com.company.crm.vo.ai.AiAnalysisResponse;
 
 public interface AiAnalysisService {
 
-    AiAnalysisVO analyze(Long authenticatedUserId, String question);
+    AiAnalysisResponse analyze(Long authenticatedUserId, String question);
+    AiAnalysisResponse analyze(Long authenticatedUserId, com.company.crm.dto.ai.AiAnalysisRequest request);
 }

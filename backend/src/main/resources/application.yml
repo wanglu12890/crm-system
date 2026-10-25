@@ -32,6 +32,17 @@ server:
     context-path: /api
 
 crm:
+  ai:
+    risk:
+      chat:
+        enabled: ${CRM_AI_RISK_CHAT_ENABLED:false}
+      advice:
+        max-customers: 50
+        max-input-bytes: 12000
+        max-output-chars: 24000
+        max-concurrent: 4
+        timeout-millis: 8000
+        request-budget-millis: 55000
   init:
     admin:
       enabled: ${CRM_ADMIN_INIT_ENABLED:false}

@@ -5,7 +5,7 @@ import java.util.List;
 
 @JsonInclude(JsonInclude.Include.ALWAYS)
 public record RiskAnalysisVO(String status, String intent, String answer, RiskAnalysisContextVO analysisContext,
-        NormalizedQuery normalizedQuery, Page page, List<RiskRecordVO> records, String resultFingerprint, Advice advice) {
+        NormalizedQuery normalizedQuery, Page page, List<RiskRecordVO> records, String resultFingerprint, Advice advice) implements AiAnalysisResponse {
     @Override public String toString() { return "RiskAnalysisVO[redacted]"; }
     public sealed interface NormalizedQuery permits ListQuery, ReasonQuery {}
     @JsonInclude(JsonInclude.Include.ALWAYS)

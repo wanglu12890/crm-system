@@ -15,6 +15,18 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 @Slf4j
 public class AiAnalysisExceptionHandler {
 
+    @ExceptionHandler(AiRiskChatUnavailableException.class)
+    public ResponseEntity<ProblemDetail> handleRiskChatUnavailable(AiRiskChatUnavailableException exception) {
+        return problem(exception.isEnabled() ? HttpStatus.SERVICE_UNAVAILABLE : HttpStatus.UNPROCESSABLE_ENTITY,
+                exception.getMessage(), exception.isEnabled() ? "AI_RISK_CHAT_NOT_READY" : "AI_RISK_CHAT_DISABLED");
+    }
+
+    @ExceptionHandler(CustomerRiskException.class)
+    public ResponseEntity<ProblemDetail> handleRisk(CustomerRiskException exception) {
+        log.warn("AI risk request rejected or failed, code={}", exception.getCode());
+        return CustomerRiskExceptionHandler.response(exception);
+    }
+
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<ProblemDetail> handleValidation(MethodArgumentNotValidException exception) {
         return problem(HttpStatus.BAD_REQUEST, "AI分析请求参数不合法", "AI_REQUEST_INVALID");

@@ -6,7 +6,7 @@ import com.company.crm.enums.StatisticsTimeRange;
 import java.time.ZonedDateTime;
 
 public record AiAnalysisVO(String answer, CustomerAnalysisIntent intent,
-                           Metrics metrics, AnalysisContext analysisContext) {
+                           Metrics metrics, AnalysisContext analysisContext) implements AiAnalysisResponse {
     public record Metrics(long totalCustomers, long levelA, long levelB, long levelC,
                           long levelD, long unrated) {}
     public record AnalysisContext(String dataScope, StatisticsTimeRange timeRange,

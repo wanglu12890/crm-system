@@ -1,6 +1,18 @@
 <?xml version="1.0" encoding="UTF-8" ?>
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.company.crm.mapper.CustomerRiskMapper">
+    <select id="selectVisibleCustomers" timeout="3" resultType="com.company.crm.dto.risk.CustomerRiskVisibility">
+        SELECT c.id AS customer_id, c.owner_id, owner.dept_id AS department_id, c.status FROM customer c
+        JOIN sys_user owner ON owner.id = c.owner_id AND owner.deleted = 0 AND owner.status = 1
+        WHERE c.status IN ('POTENTIAL','ACTIVE')
+        <choose>
+            <when test="dataScope != null and ids != null and !ids.isEmpty() and ids.size() &lt;= 50 and ((dataScope.scopeCode == 'SELF' and dataScope.userId != null) or (dataScope.scopeCode == 'DEPT' and dataScope.deptId != null))">
+                AND <include refid="com.company.crm.mapper.CustomerMapper.customerVisibilityConditions"/>
+                AND c.id IN <foreach collection="ids" item="id" open="(" separator="," close=")">#{id}</foreach>
+            </when>
+            <otherwise>AND 1 = 0</otherwise>
+        </choose>
+    </select>
     <sql id="validFollow">f.follow_at IS NOT NULL AND f.follow_at &gt;= c.created_at AND f.follow_at &lt;= #{analysisTime}</sql>
     <select id="selectCandidates" timeout="10" resultType="com.company.crm.dto.risk.CustomerRiskAggregate">
         WITH eligible AS (

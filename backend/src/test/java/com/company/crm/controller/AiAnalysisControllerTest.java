@@ -60,7 +60,7 @@ class AiAnalysisControllerTest {
         perform("{\"question\":\"本月新增了多少客户？\"}", null)
                 .andExpect(status().isUnauthorized());
         verify(aiAnalysisService, never()).analyze(org.mockito.ArgumentMatchers.any(),
-                org.mockito.ArgumentMatchers.any());
+                org.mockito.ArgumentMatchers.any(com.company.crm.dto.ai.AiAnalysisRequest.class));
     }
 
     @Test
@@ -69,7 +69,7 @@ class AiAnalysisControllerTest {
                 securityUser(7L, "customer:list"))
                 .andExpect(status().isForbidden());
         verify(aiAnalysisService, never()).analyze(org.mockito.ArgumentMatchers.any(),
-                org.mockito.ArgumentMatchers.any());
+                org.mockito.ArgumentMatchers.any(com.company.crm.dto.ai.AiAnalysisRequest.class));
     }
 
     @Test
@@ -78,13 +78,13 @@ class AiAnalysisControllerTest {
                 securityUser(7L, "ai:analysis"))
                 .andExpect(status().isForbidden());
         verify(aiAnalysisService, never()).analyze(org.mockito.ArgumentMatchers.any(),
-                org.mockito.ArgumentMatchers.any());
+                org.mockito.ArgumentMatchers.any(com.company.crm.dto.ai.AiAnalysisRequest.class));
     }
 
     @Test
     void shouldPassTrustedPrincipalIdAndReturnNotReady() throws Exception {
         doThrow(new AiAnalysisNotReadyException())
-                .when(aiAnalysisService).analyze(7L, "本月新增了多少客户？");
+                .when(aiAnalysisService).analyze(org.mockito.ArgumentMatchers.eq(7L), org.mockito.ArgumentMatchers.any(com.company.crm.dto.ai.AiAnalysisRequest.class));
 
         perform("{\"question\":\"本月新增了多少客户？\",\"userId\":999}",
                 securityUser(7L, "ai:analysis", "customer:list"))
@@ -92,7 +92,7 @@ class AiAnalysisControllerTest {
                 .andExpect(jsonPath("$.code").value("AI_ANALYSIS_NOT_READY"))
                 .andExpect(jsonPath("$.detail").value("AI分析功能尚未就绪"));
 
-        verify(aiAnalysisService).analyze(7L, "本月新增了多少客户？");
+        verify(aiAnalysisService).analyze(org.mockito.ArgumentMatchers.eq(7L), org.mockito.ArgumentMatchers.any(com.company.crm.dto.ai.AiAnalysisRequest.class));
     }
 
     @Test
@@ -103,13 +103,13 @@ class AiAnalysisControllerTest {
         perform("{\"question\":\"" + "问".repeat(1001) + "\"}", user)
                 .andExpect(status().isBadRequest());
         verify(aiAnalysisService, never()).analyze(org.mockito.ArgumentMatchers.any(),
-                org.mockito.ArgumentMatchers.any());
+                org.mockito.ArgumentMatchers.any(com.company.crm.dto.ai.AiAnalysisRequest.class));
     }
 
     @Test
     void shouldMapDataScopeFailureToForbiddenWithoutSuccessResult() throws Exception {
         doThrow(new DataScopeConfigurationException("当前用户没有可用的客户数据范围"))
-                .when(aiAnalysisService).analyze(7L, "查询客户");
+                .when(aiAnalysisService).analyze(org.mockito.ArgumentMatchers.eq(7L), org.mockito.ArgumentMatchers.any(com.company.crm.dto.ai.AiAnalysisRequest.class));
 
         perform("{\"question\":\"查询客户\"}", securityUser(7L, "ai:analysis", "customer:list"))
                 .andExpect(status().isForbidden())
@@ -119,7 +119,7 @@ class AiAnalysisControllerTest {
     @Test
     void shouldHideStatisticsFailureDetails() throws Exception {
         doThrow(new CustomerStatisticsDataException("internal aggregate details"))
-                .when(aiAnalysisService).analyze(7L, "查询客户");
+                .when(aiAnalysisService).analyze(org.mockito.ArgumentMatchers.eq(7L), org.mockito.ArgumentMatchers.any(com.company.crm.dto.ai.AiAnalysisRequest.class));
 
         perform("{\"question\":\"查询客户\"}", securityUser(7L, "ai:analysis", "customer:list"))
                 .andExpect(status().isInternalServerError())
@@ -150,7 +150,7 @@ class AiAnalysisControllerTest {
         var result = new com.company.crm.dto.statistics.CustomerStatisticsResult(
                 48, 10, 15, 12, 8, 3, "SELF", StatisticsTimeRange.CURRENT_MONTH,
                 time.withDayOfMonth(1), time.withDayOfMonth(1).plusMonths(1), time, "Asia/Shanghai");
-        org.mockito.Mockito.when(aiAnalysisService.analyze(7L, "本月新增了多少客户？"))
+        org.mockito.Mockito.when(aiAnalysisService.analyze(org.mockito.ArgumentMatchers.eq(7L), org.mockito.ArgumentMatchers.any(com.company.crm.dto.ai.AiAnalysisRequest.class)))
                 .thenReturn(AiAnalysisVO.from(CustomerAnalysisIntent.CUSTOMER_TOTAL, result));
         perform("{\"question\":\"本月新增了多少客户？\",\"userId\":999,\"dataScope\":\"ALL\"}",
                 securityUser(7L, "ai:analysis", "customer:list"))
@@ -164,20 +164,55 @@ class AiAnalysisControllerTest {
                 .andExpect(jsonPath("$.analysisContext.referenceTime").isString())
                 .andExpect(jsonPath("$.userId").doesNotExist())
                 .andExpect(jsonPath("$.toolCalls").doesNotExist());
-        verify(aiAnalysisService).analyze(7L, "本月新增了多少客户？");
+        verify(aiAnalysisService).analyze(org.mockito.ArgumentMatchers.eq(7L), org.mockito.ArgumentMatchers.any(com.company.crm.dto.ai.AiAnalysisRequest.class));
     }
 
     @Test
     void shouldDistinguishUnsupportedMissingToolAndUnavailableModel() throws Exception {
         var user = securityUser(7L, "ai:analysis", "customer:list");
-        doThrow(new AiUnsupportedAnalysisException()).when(aiAnalysisService).analyze(7L, "问题");
+        doThrow(new AiUnsupportedAnalysisException()).when(aiAnalysisService).analyze(org.mockito.ArgumentMatchers.eq(7L), org.mockito.ArgumentMatchers.any(com.company.crm.dto.ai.AiAnalysisRequest.class));
         perform("{\"question\":\"问题\"}", user).andExpect(status().isUnprocessableEntity())
                 .andExpect(jsonPath("$.code").value("AI_ANALYSIS_UNSUPPORTED"));
-        doThrow(new AiAnalysisProtocolException()).when(aiAnalysisService).analyze(7L, "问题");
+        doThrow(new AiAnalysisProtocolException()).when(aiAnalysisService).analyze(org.mockito.ArgumentMatchers.eq(7L), org.mockito.ArgumentMatchers.any(com.company.crm.dto.ai.AiAnalysisRequest.class));
         perform("{\"question\":\"问题\"}", user).andExpect(status().isBadGateway())
                 .andExpect(jsonPath("$.code").value("AI_MODEL_RESPONSE_INVALID"));
-        doThrow(new AiModelUnavailableException()).when(aiAnalysisService).analyze(7L, "问题");
+        doThrow(new AiModelUnavailableException()).when(aiAnalysisService).analyze(org.mockito.ArgumentMatchers.eq(7L), org.mockito.ArgumentMatchers.any(com.company.crm.dto.ai.AiAnalysisRequest.class));
         perform("{\"question\":\"问题\"}", user).andExpect(status().isServiceUnavailable())
                 .andExpect(jsonPath("$.code").value("AI_MODEL_UNAVAILABLE"));
+    }
+
+    @Test
+    void riskExceptionsKeepTheirStatusAndCodeAtSharedChatEntry() throws Exception {
+        var actor = securityUser(7L, "ai:analysis", "customer:list");
+        for (var code : com.company.crm.exception.CustomerRiskException.Code.values()) {
+            int expected = switch (code) {
+                case INVALID_QUERY -> 400;
+                case AUTHENTICATION_REQUIRED -> 401;
+                case ACCESS_DENIED, ACCESS_CONTEXT_CHANGED -> 403;
+                case SCOPE_UNSUPPORTED, QUERY_UNSUPPORTED, CUSTOMER_SELECTION_REQUIRED -> 422;
+                case NOT_FOUND -> 404;
+                case RESULT_STALE -> 409;
+                case NOT_READY, CAPACITY_EXCEEDED -> 503;
+                case INVALID_DATA -> 500;
+            };
+            String expectedCode = switch (code) {
+                case INVALID_QUERY -> "RISK_REQUEST_INVALID";
+                case AUTHENTICATION_REQUIRED -> "RISK_AUTHENTICATION_REQUIRED";
+                case ACCESS_DENIED -> "RISK_ACCESS_DENIED";
+                case SCOPE_UNSUPPORTED -> "RISK_SCOPE_UNSUPPORTED";
+                case ACCESS_CONTEXT_CHANGED -> "RISK_ACCESS_CONTEXT_CHANGED";
+                case QUERY_UNSUPPORTED -> "RISK_QUERY_UNSUPPORTED";
+                case CUSTOMER_SELECTION_REQUIRED -> "RISK_CUSTOMER_SELECTION_REQUIRED";
+                case NOT_FOUND -> "RISK_CUSTOMER_NOT_FOUND";
+                case RESULT_STALE -> "RISK_RESULT_STALE";
+                case NOT_READY -> "RISK_RULES_NOT_READY";
+                case CAPACITY_EXCEEDED -> "RISK_CAPACITY_EXCEEDED";
+                case INVALID_DATA -> "RISK_QUERY_FAILED";
+            };
+            doThrow(new com.company.crm.exception.CustomerRiskException(code)).when(aiAnalysisService).analyze(org.mockito.ArgumentMatchers.eq(7L), org.mockito.ArgumentMatchers.any(com.company.crm.dto.ai.AiAnalysisRequest.class));
+            perform("{\"question\":\"问题\"}", actor).andExpect(status().is(expected))
+                    .andExpect(jsonPath("$.code").value(expectedCode))
+                    .andExpect(jsonPath("$.records").doesNotExist());
+        }
     }
 }

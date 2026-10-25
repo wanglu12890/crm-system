@@ -41,6 +41,26 @@ class CustomerRiskMapperTest {
         String sql=sql(parameters(new DataScopeContext(DataScopeType.DEPT,7L,20L),Set.of("A","UNRATED"),99L)).getSql();
         assertThat(sql).contains("owner.dept_id = ?","c.id = ?","c.customer_level IS NULL","c.customer_level = ?");
     }
+    @Test void adviceRecheckOnlyReadsCurrentPageOwnershipWithSameVisibilityRules() throws Exception {
+        var params=parameters(new DataScopeContext(DataScopeType.SELF,7L,null),Set.of(),null);
+        params.put("ids",List.of(1L,2L));
+        String query=configuration().getMappedStatement("com.company.crm.mapper.CustomerRiskMapper.selectVisibleCustomers")
+                .getBoundSql(params).getSql();
+        assertThat(query).contains("c.owner_id = ?","c.deleted = 0","c.owner_id IS NOT NULL","owner.status = 1",
+                "owner.deleted = 0","'POTENTIAL','ACTIVE'","c.id IN","c.owner_id","owner.dept_id");
+        assertThat(query.toLowerCase()).doesNotContain("follow_record","content","phone","address","count(","sum(");
+        params.put("dataScope",new DataScopeContext(DataScopeType.DEPT,7L,20L));
+        assertThat(configuration().getMappedStatement("com.company.crm.mapper.CustomerRiskMapper.selectVisibleCustomers")
+                .getBoundSql(params).getSql()).contains("owner.dept_id = ?");
+        for(var ids:List.of(List.of(),java.util.Collections.nCopies(51,1L))) {
+            params.put("ids",ids);
+            assertThat(configuration().getMappedStatement("com.company.crm.mapper.CustomerRiskMapper.selectVisibleCustomers")
+                .getBoundSql(params).getSql()).contains("AND 1 = 0");
+        }
+        params.put("ids",List.of(1L)); params.put("dataScope",new DataScopeContext(DataScopeType.ALL,7L,null));
+        assertThat(configuration().getMappedStatement("com.company.crm.mapper.CustomerRiskMapper.selectVisibleCustomers")
+                .getBoundSql(params).getSql()).contains("AND 1 = 0");
+    }
     @ParameterizedTest @ValueSource(strings={"ALL","NULL","DEPT_NULL","SELF_NULL"})
     void malformedScopeAlwaysClosesSql(String scope) throws Exception {
         DataScopeContext context=switch(scope) {

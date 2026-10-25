@@ -3,7 +3,7 @@ package com.company.crm.controller;
 import com.company.crm.dto.ai.AiAnalysisRequest;
 import com.company.crm.security.SecurityUser;
 import com.company.crm.service.AiAnalysisService;
-import com.company.crm.vo.ai.AiAnalysisVO;
+import com.company.crm.vo.ai.AiAnalysisResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -22,11 +22,11 @@ public class AiAnalysisController {
 
     @PostMapping
     @PreAuthorize("hasAuthority('ai:analysis') and hasAuthority('customer:list')")
-    public ResponseEntity<AiAnalysisVO> analyze(
+    public ResponseEntity<AiAnalysisResponse> analyze(
             @Valid @RequestBody AiAnalysisRequest request,
             @AuthenticationPrincipal SecurityUser securityUser
     ) {
         Long authenticatedUserId = securityUser == null ? null : securityUser.getUserId();
-        return ResponseEntity.ok(aiAnalysisService.analyze(authenticatedUserId, request.question()));
+        return ResponseEntity.ok(aiAnalysisService.analyze(authenticatedUserId, request));
     }
 }

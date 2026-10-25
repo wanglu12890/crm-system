@@ -14,6 +14,18 @@ import static com.company.crm.exception.CustomerRiskException.Code.ACCESS_DENIED
 @Component
 @RequiredArgsConstructor
 public class CustomerRiskAccessPolicy {
+    public static boolean sameContext(CustomerRiskAccessContext expected, CustomerRiskAccessContext actual) {
+        if (expected == null || actual == null || expected.effectiveScope() == null || actual.effectiveScope() == null) return false;
+        var a = expected.effectiveScope();
+        var b = actual.effectiveScope();
+        return java.util.Objects.equals(expected.userId(), actual.userId())
+                && java.util.Objects.equals(expected.role(), actual.role())
+                && java.util.Objects.equals(expected.departmentId(), actual.departmentId())
+                && java.util.Objects.equals(expected.authorizedScope(), actual.authorizedScope())
+                && expected.requestedScope() == actual.requestedScope()
+                && a.getScope() == b.getScope() && java.util.Objects.equals(a.getUserId(), b.getUserId())
+                && java.util.Objects.equals(a.getDeptId(), b.getDeptId());
+    }
     private final SysUserMapper users;
     private final DataScopeResolver scopes;
     public DataScopeContext resolve(Long userId, CustomerQueryScopeIntent requested) {

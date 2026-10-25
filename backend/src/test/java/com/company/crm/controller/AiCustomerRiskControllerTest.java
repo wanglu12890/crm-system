@@ -33,7 +33,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @WebMvcTest(AiCustomerRiskController.class)
 @Import({SecurityConfig.class, JwtAuthenticationFilter.class, RestAuthenticationEntryPoint.class,
         RestAccessDeniedHandler.class, CustomerRiskExceptionHandler.class, CustomerRiskAnalysisServiceImpl.class,
-        CustomerRiskServiceImpl.class, CustomerRiskAccessPolicy.class, CustomerRiskEvaluator.class, CustomerRiskProperties.class})
+        CustomerRiskResponseAssembler.class, CustomerRiskServiceImpl.class, CustomerRiskAccessPolicy.class, CustomerRiskEvaluator.class, CustomerRiskProperties.class})
 class AiCustomerRiskControllerTest {
     @Autowired MockMvc mvc;
     @Autowired ObjectMapper json;

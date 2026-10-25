@@ -24,8 +24,26 @@ public class CustomerRiskServiceImpl implements CustomerRiskService {
     @Override
     @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ, propagation = Propagation.REQUIRES_NEW)
     public CustomerRiskPage analyze(Long authenticatedUserId, CustomerRiskQuery query) {
+        return execute(authenticatedUserId, query, null);
+    }
+
+    @Override
+    @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ, propagation = Propagation.REQUIRES_NEW)
+    public CustomerRiskPage analyze(Long authenticatedUserId, CustomerRiskQuery query, CustomerRiskAccessContext expectedContext) {
+        if (expectedContext == null) throw new CustomerRiskException(ACCESS_CONTEXT_CHANGED);
+        return execute(authenticatedUserId, query, expectedContext);
+    }
+
+    private CustomerRiskPage execute(Long authenticatedUserId, CustomerRiskQuery query, CustomerRiskAccessContext expectedContext) {
         if (query == null) throw new CustomerRiskException(INVALID_QUERY);
-        var context = access.resolveContext(authenticatedUserId,query.scope());
+        CustomerRiskAccessContext context;
+        try { context = access.resolveContext(authenticatedUserId,query.scope()); }
+        catch (CustomerRiskException exception) {
+            if (expectedContext != null) throw new CustomerRiskException(ACCESS_CONTEXT_CHANGED);
+            throw exception;
+        }
+        if (expectedContext != null && !CustomerRiskAccessPolicy.sameContext(expectedContext, context))
+            throw new CustomerRiskException(ACCESS_CONTEXT_CHANGED);
         var scope = context.effectiveScope();
         var rules = properties.snapshot();
         var time = ZonedDateTime.now(businessClock).withZoneSameInstant(BUSINESS_ZONE);
