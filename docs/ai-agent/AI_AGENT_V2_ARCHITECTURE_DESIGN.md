@@ -1,8 +1,8 @@
 # CRM AI Agent V2-D1：后端架构与接口设计
 
-- 日期：2026-10-18；状态：**技术设计建议，待人工架构评审，未实现、未验收**。
+- 初版：2026-10-18；更新：2026-10-25。状态：S1/S2-A、B1统一入口、B2风险Tool及B3受约束建议已有实现；风险聊天仍默认关闭，B4前端与真实环境验收待实施。
 - 业务依据：[V2.0正式PRD](AI_AGENT_V2_REQUIREMENTS.md)、[R1可行性报告](AI_AGENT_V2_FEASIBILITY_REPORT.md)、[D1任务](../../task/1018/2-CRM-AI-Agent-V2-D1.md)。PRD的角色、三权限、状态、阈值、排序和20/50分页已冻结，本设计不重新裁决业务规则。
-- 本阶段只新增本文档，不修改PRD、旧文档、源码、SQL、配置或数据库，不执行测试、构建或真实Qwen调用。所有新增类、路径、参数和限额均为待评审设计，不是当前可调用接口。
+- 当前实施依据见归档的[B1报告](../historical/AI_AGENT_V2_S2_B1_IMPLEMENTATION_REPORT.md)、[B2报告](../historical/AI_AGENT_V2_S2_B2_IMPLEMENTATION_REPORT.md)、[B3报告](../historical/AI_AGENT_V2_S2_B3_IMPLEMENTATION_REPORT.md)。报告保留各阶段当时的测试、决策和限制；本设计文档描述当前B1/B2/B3实现及B4待办，不把历史阶段的未就绪状态当作当前开启开关后的行为。
 
 ## 1. 设计目标与范围
 
@@ -17,7 +17,7 @@
 | 证据 | 当前事实 | V2决策 |
 |---|---|---|
 | [AiAnalysisController](../../backend/src/main/java/com/company/crm/controller/AiAnalysisController.java) | POST /api/ai/analysis，双权限，question≤1000，主体ID来自SecurityUser | 保持入口、授权和返回兼容；不加follow:list到V1 |
-| [AiAnalysisService](../../backend/src/main/java/com/company/crm/service/AiAnalysisService.java) | 分类严格三字段；关闭内部工具执行；两阶段模型；手动最多一次Tool；Java生成answer | 复用执行模式，不把风险意图加入旧统计Tool或旧VO |
+| [AiAnalysisService](../../backend/src/main/java/com/company/crm/service/AiAnalysisService.java) | B1统一入口契约；Router按业务分支严格分类；独立统计编排继续两阶段模型、手动最多一次Tool | 保留统计执行模式，不把风险意图加入旧统计Tool或统计VO字段 |
 | [CustomerStatisticsTool](../../backend/src/main/java/com/company/crm/ai/tool/CustomerStatisticsTool.java)、[Factory](../../backend/src/main/java/com/company/crm/ai/tool/CustomerStatisticsToolFactory.java) | 请求独立、不可变绑定用户/请求范围；Schema仅timeRange；AtomicReference状态 | 复用隔离及次数限制方式；风险Tool另设，不修改旧Schema |
 | [CustomerAnalysisScopePolicy](../../backend/src/main/java/com/company/crm/service/CustomerAnalysisScopePolicy.java) | 显式请求读有效角色；允许管理员ALL；CURRENT_AUTHORIZED跳过单角色限制 | 必须先加V2准入，不可直接作为完整门禁 |
 | [DataScopeResolver](../../backend/src/main/java/com/company/crm/security/datascope/DataScopeResolver.java) | 按customer:list解析最大范围，ALL>DEPT>SELF，DEPT无部门拒绝 | 复用解析职责，不改V1规则 |
@@ -25,78 +25,79 @@
 | [CustomerMapper.xml](../../backend/src/main/resources/mapper/CustomerMapper.xml)、[CustomerMapper](../../backend/src/main/java/com/company/crm/mapper/CustomerMapper.java) | 列表/统计共享普通客户可见性，未排除INACTIVE | 复用共享过滤后再加V2状态条件；不改变原片段语义 |
 | [Customer](../../backend/src/main/java/com/company/crm/entity/Customer.java)、[CustomerController](../../backend/src/main/java/com/company/crm/controller/CustomerController.java)及相关DTO/VO | 有建档/负责人，无分配历史；当前列表/创建，不是完整详情服务 | 新只读投影，不输出Entity或假定已有详情授权 |
 | [SecurityConfig](../../backend/src/main/java/com/company/crm/config/SecurityConfig.java) | 已启用方法授权，非登录路由默认认证 | 新Controller加三权限；Service仍检查可信当前权限/角色 |
-| [AiAnalysisVO](../../backend/src/main/java/com/company/crm/vo/AiAnalysisVO.java)、[Advice](../../backend/src/main/java/com/company/crm/exception/AiAnalysisExceptionHandler.java) | V1直接VO，ProblemDetail含code；Advice仅作用于旧Controller | 风险独立VO/模块Advice，沿用错误协议，不扩大旧Advice作用域 |
+| [AiAnalysisVO](../../backend/src/main/java/com/company/crm/vo/ai/AiAnalysisVO.java)、[Advice](../../backend/src/main/java/com/company/crm/exception/AiAnalysisExceptionHandler.java) | V1直接VO，ProblemDetail含code；聊天Advice作用于统一Controller并显式映射风险异常 | 复用两类VO联合返回，S2-A独立Advice保持作用域及合同 |
 | [init.sql](../../database/init.sql) customer / follow_record | follow_at独立于created_at；target_type+target_id多态；无计划完成/分配事件 | 仅最小聚合读取，不新建完整FollowRecord业务模块 |
 
-同时审阅AiAnalysisServiceTest、CustomerAnalysisScopePolicyTest、CustomerStatisticsToolTest及Customer Mapper/Service相关用例；现有测试不能代替新风险明细授权和规则测试。未发现关键PRD冲突。上下文中“V2尚未开发”仍符合当前代码状态，不表示R1尚未评审；本阶段不改上下文。
+同时审阅AiAnalysisServiceTest、CustomerAnalysisScopePolicyTest、CustomerStatisticsToolTest及Customer Mapper/Service相关用例；现有测试不能代替新风险明细授权和规则测试。未发现关键PRD冲突。该表记录初版D1的调查依据；当前S1/S2-A已实现，入口和目录以本次修订及当前源码为准。
 
 ## 3. 总体架构与调用链
 
-推荐两个独立V2读取入口，共用业务服务：一个自然语言编排入口，一个结构化交互入口。后者供分页、明确客户原因和“为当前页生成建议”操作，模型不可用时仍可读取确定性风险结果。
+自然语言统一使用 `AiAnalysisController` 的 `POST /ai/analysis`，默认 context-path=/api 后对外为 `/api/ai/analysis`。不创建 AiRiskAnalysisController 或 /api/ai/risk-analysis。保留 S2-A 的 AiCustomerRiskController（/api/customer-risks/analyses），供结构化操作及后续分页/明确对象交互使用。
 
 ```mermaid
 flowchart TD
-  V1[旧 AI Controller 双权限] --> OLD[既有 V1 Service / Tool / Statistics]
-  NL[新 V2 自然语言 Controller 三权限] --> GATE[V2 角色与权限准入]
-  GATE --> CLASS[Qwen 无工具分类]
-  CLASS --> PLAN[Java 校验并绑定查询计划]
-  PLAN --> SELECT[Qwen 选择唯一空参数 Tool]
-  SELECT --> TOOL[请求独立 Risk Tool]
-  UI[新 V2 结构化 Controller 三权限] --> DIRECT[Java 校验结构化请求]
-  DIRECT --> SERVICE[Risk Service 再校验]
-  TOOL --> SERVICE
-  SERVICE --> TX[短只读事务 固定 T 与规则快照]
-  TX --> MAP[专用 Mapper 授权客户与历史聚合]
-  MAP --> JAVA[Java 判级 筛选 排序 计数 分页]
-  JAVA --> RESULT[不可变可信结果 事务结束]
-  RESULT --> CHOICE{请求建议且非空?}
-  CHOICE -->|否| VO[V2 VO Java 组装]
-  CHOICE -->|是| CHECK[当前权限与页内对象复核]
-  CHECK --> ADVICE[Qwen 单次当前页建议 无工具]
-  ADVICE --> VALID[校验建议 失败标不可用]
-  VALID --> VO
-  VO --> FINAL[返回前再核验权限及页内对象]
+  CHAT[AI聊天窗口] --> ENTRY[AiAnalysisController 公共双权限]
+  ENTRY --> APP[AiAnalysisServiceImpl]
+  APP --> ROUTER[AiIntentRouter 无Tool分类]
+  ROUTER --> STATS[AiStatisticsAnalysisServiceImpl]
+  STATS --> ST[统计Tool 唯一注册]
+  ST --> SS[CustomerStatisticsService]
+  ROUTER --> GATE{RISK}
+  GATE -->|开关关闭| CLOSED[受控关闭 不读取风险数据]
+  GATE -->|开关开启| RISK[AiRiskAnalysisServiceImpl V2准入]
+  RISK --> RT[唯一零参数风险Tool]
+  RT --> CORE[CustomerRiskService 独立复核]
+  STRUCT[AiCustomerRiskController 三权限] --> SA[CustomerRiskAnalysisService]
+  SA --> CORE
+  CORE --> RESULT[可信风险结果]
+  RESULT --> ASSEMBLER[CustomerRiskResponseAssembler 确定性VO]
+  ASSEMBLER -->|仅自然语言SUGGESTIONS| PRE[前置权限与批量对象复核]
+  PRE --> ADVICE[RiskAdviceService 受控动作与Java模板]
+  ADVICE --> POST[返回前权限与批量对象复核]
 ```
 
-| 建议组件/位置 | 职责与依赖方向 |
+| 组件/位置 | 职责与当前阶段 |
 |---|---|
-| controller/AiRiskAnalysisController | 自然语言入口、请求校验、三权限、认证主体；只依赖编排服务 |
-| controller/CustomerRiskController | 结构化只读操作入口，同样三权限；依赖业务/建议编排，不调用Mapper |
-| service/AiRiskAnalysisService | 分类、计划绑定、唯一Tool协议、结果一致性及可选建议；不计算风险 |
-| service/CustomerRiskAccessPolicy | 当前有效用户、单角色、三权限、最大/实际范围校验；复用现有角色权限Mapper和Resolver/范围策略 |
-| service/CustomerRiskService及impl | 独立授权复核、短只读事务、固定T/规则、批量读取、规则计算/排序/计数/分页/对象原因 |
-| service/CustomerRiskEvaluator | 无I/O纯Java规则函数与Comparator；不依赖Qwen、SecurityContext或Mapper |
-| mapper/CustomerRiskMapper及XML | 只读授权集合与历史聚合；不继承BaseMapper，避免顺带暴露写方法 |
-| service/RiskAdviceService | 事务外组织最小结构化输入、单次模型、输出验证和降级；不得重新定义等级 |
-| ai/tool/CustomerRiskToolFactory、CustomerRiskTool | 请求不可变参数绑定、最多一次调用、调用Risk Service；不构造外部可传的SQL权限上下文 |
-| config/风险规则属性、内部RuleSnapshot | 默认阈值/版本、合法性与不可变快照；不引入规则表/管理页面 |
-| dto/risk、vo/risk、exception/风险Advice | 客户端请求/内部投影/可信结果/建议严格分离；直接VO、模块ProblemDetail |
+| controller/AiAnalysisController | 已有统一自然语言入口，保留双权限；返回共同Java响应接口 |
+| service/AiAnalysisService及impl | 统一协调、身份检查、路由与开关处理，传递总预算起点；不包含业务Tool细节 |
+| service/AiIntentRouter | B1具体Spring组件；分类、严格协议解析，输出语义候选而非授权计划；无数据库、无Tool |
+| service/AiStatisticsAnalysisService及impl | B1迁移V1范围策略、唯一统计Tool校验、执行和VO组装；不重复分类 |
+| service/AiRiskAnalysisService及impl | 已实现B2内部风险编排，B3仅在SUGGESTIONS附加建议，保留单次核心查询 |
+| service/RiskAdviceService及impl、CustomerRiskAdviceAccessVerifier | B3独立建议协议/预算；建议前后重新授权和当前页批量对象复核 |
+| controller/AiCustomerRiskController、service/CustomerRiskAnalysisService及impl | 保留S2-A结构化入口和应用协调，不经过模型路由 |
+| service/CustomerRiskAccessPolicy、CustomerRiskService及impl、CustomerRiskEvaluator | 保留S1可信准入、短只读事务、确定性规则与排序/分页 |
+| ai/tool/CustomerStatisticsTool及Factory | 已有V1工具，Schema不变 |
+| ai/tool/CustomerRiskTool及Factory | B2已实现；风险开关开启且授权通过后按请求注册，最多一次执行 |
+| vo/ai/AiAnalysisResponse | B1轻量共同响应接口，无字段、无Jackson多态元数据 |
+| vo/ai/AiAnalysisVO、RiskAnalysisVO及关联VO | 复用现有JSON，按intent判别；无payload外包装 |
+| dto/ai、dto/ai/internal、dto/risk | 分别为HTTP请求、内部分类候选、S1内部风险数据 |
 
-以上名称用于后续任务定位，待评审后实施。依赖方向为Controller→编排/业务→策略、Evaluator、Mapper；Tool→业务，业务不回调Tool/模型；避免循环依赖及网络调用占用数据库事务。
+不因共享聊天窗口同时注册全部业务Tool。当前B2/B3风险读取及建议事实保护遵循下文安全要求，开关仍默认关闭。
 
 ## 4. 关键方案比较与推荐
 
 | 决策 | 方案A | 方案B | 推荐及取舍 |
 |---|---|---|---|
-| AI入口 | 复用/api/ai/analysis，加版本分派；必须保留入口双权限，分类后V2分支另做三权限/角色校验，任何明细前完成 | 新V2入口，V1契约/权限不变；V2可在分类前做完整准入 | **B**：兼容与授权更容易验证，增加少量Controller但降低旧链路回归成本。A可行但响应联合类型、误路由及分支门禁复杂；绝不能把follow:list加在共享入口统一拦V1 |
+| AI入口 | 现有Service内部扩展分类并委托风险Service | 提取轻量路由组件，由统一Service分派独立统计/风险编排 | **采用B**：统一/api/ai/analysis，Controller双权限不变；只新增具体Router，不建设通用Agent框架；结构化风险入口保留 |
 | 数据访问 | 在CustomerMapper增加风险查询，复用现有位置 | 专用CustomerRiskMapper，只读投影，引用原共享过滤并加状态条件 | **B**：隔离复杂聚合及测试，不污染列表/统计；跨XML共享片段需显式namespace引用与加载测试，不复制不同口径 |
 | 判级位置 | SQL CASE完成判级、排序、计数分页；适合大数据，但规则需与Java解释同步 | SQL只做历史聚合，Java唯一判级/Comparator，全集合计算后分页 | **B**：当前阶段可测试性、版本一致性更好，符合Java确定性要求；必须容量保护，不能无界内存。A留为规模演进，经等价性测试再采用 |
 | Tool数量 | 一个通用只读Risk Tool，查询计划完全服务器绑定 | 分清单Tool与原因Tool，每次仅注册对应一个 | **A**：零模型参数，一个执行状态，模式在Java计划里分支；B语义直观但重复包装/状态，初版收益有限 |
-| 建议返回 | 与风险同步完成，一次HTTP但等待模型 | 先返回风险，按需独立请求当前页建议 | **B为默认交互**：结构化LIST先展示，SUGGESTIONS再生成；同一自然语言请求明确索要建议时可同步返回已算风险及建议状态。两者均复用同一业务结果，模型失败不丢风险 |
+| 建议返回 | 与风险同步完成，一次HTTP但等待模型 | 先返回风险，按需独立请求当前页建议 | 当前自然语言SUGGESTIONS同步附加B3建议，LIST/REASON不自动生成；S2-A结构化SUGGESTIONS仍为未就绪。B4按现有接口组织按需交互，不把结构化入口当作已支持AI建议 |
 
 不增加缓存集群、工作流引擎、RAG、多Agent、异步任务表或完整跟进CRUD。建议生成的分阶段返回不等于持久化快照，跨请求仍查询当前状态。
 
 ## 5. 角色权限与范围设计
 
-### 5.1 三层强制检查
+### 5.1 公共权限与分支授权
 
-1. 两个新Controller均使用`ai:analysis AND customer:list AND follow:list`方法授权；现有JWT Filter恢复SecurityUser，客户端不提供操作者ID。V1 Controller保留原双权限。
-2. `CustomerRiskAccessPolicy`从可信用户ID重新读取有效用户/有效角色及权限，确认启用未删除、**恰好一个**SALES_MANAGER或SALES_STAFF且三权限齐全；管理员/未知/多角色即使权限齐也403。不能仅用角色名或JWT自称范围。
-3. 用现有DataScopeResolver解析customer:list最大范围，要求经理为DEPT、销售为SELF；DEPT必须有部门。准入通过后可复用CustomerAnalysisScopePolicy的销售范围决策；其前后的V2不变量校验必须保留，特别是CURRENT_AUTHORIZED仍先校验单角色/配置。无ALL执行分支。
+1. 统一聊天Controller保留 `ai:analysis AND customer:list`；S2-A结构化Controller继续三权限。JWT主体是唯一可信身份来源。
+2. 统一Router只接收用户问题，先做无Tool语义分类，不读取客户/跟进数据，不把用户ID、角色、部门或授权上下文交给模型。用户问题自身可能含敏感内容，不宣称无Tool就没有敏感输入；不记录完整问题/Prompt。
+3. STATISTICS使用原CustomerAnalysisScopePolicy，保留管理员ALL和默认多角色既有语义。RISK不能因权限不足或未开放降级成统计。
+4. **风险开关**：`crm.ai.risk.chat.enabled`默认false，关闭为422/AI_RISK_CHAT_DISABLED，无第二次模型调用或风险数据读取；当前开启后执行B2查询及按需B3建议。B1阶段开启仍返回503/AI_RISK_CHAT_NOT_READY的行为仅作为历史记录保留。开关不影响S2-A。
+5. **B2**：风险分支先调用CustomerRiskAccessPolicy，重新读取启用未删除用户、恰好一个有效销售角色和三权限，再解析最大授权/请求范围。通过后才能绑定计划和注册风险Tool。管理员、多角色、未知角色和配置不符拒绝。
+6. Tool调用核心Service时在短事务重新复核；预期用户/角色/部门/授权及有效范围必须在Mapper前比较，不一致拒绝。REASON仍在授权SQL内检查对象，建议发送前和返回前批量复核当前准入/页内对象。
 
-V2策略输出内部不可变AccessContext：操作者、角色、authorizedScope、effectiveScope、当前部门和权限校验状态。调用方只能提交语义scopeIntent（默认CURRENT_AUTHORIZED或SELF/DEPT），不能直接传DataScopeContext。ALL语义422，非法枚举400；销售DEPT请求422；角色/最大授权不符和缺部门403。
-
-自然语言入口在分类前完成准入，分类后校验请求范围并绑定计划；Tool调用业务服务时在新短事务重新查准入和范围。若与预期用户、角色、部门、最大/执行范围不一致，拒绝而不悄然切换到另一个范围。结构化入口也走相同服务校验，不能因为没有Tool就绕过。
+CustomerRiskAccessContext只由后端产生；Router输出的AiAnalysisPlan仅是结构合法的语义候选，不能作为授权上下文。经理最大DEPT、允许SELF/DEPT；销售仅SELF。ALL和非法业务范围拒绝；不能把CURRENT_AUTHORIZED当作V2门禁旁路。
 
 ### 5.2 Mapper与对象边界
 
@@ -145,7 +146,7 @@ LEFT JOIN条件不能移到外层WHERE导致无跟进客户消失；空JOIN行�
 
 SQL GROUP BY比先读取所有跟进原文再Java聚合更省数据且降低泄露面；窗口函数适合取整条最新记录，但本版只需要MAX/COUNT，建议不引入；按客户逐一查询不可接受。
 
-SQL只聚合、Java判级意味着必须读齐本次授权筛选后的客户聚合集合。设置后端`maxCandidates`容量保护（评审起点5000，待S1测量，不是业务分页上限）：授权候选CTE最多读取cap+1行并聚合；一旦超过cap，**整次查询受控拒绝**，不对截断集合返回匹配总数/风险页。不能LIMIT 20后再判级。页大小50不能代替总集合保护。独立单客户原因查询不扫描全范围。
+SQL只聚合、Java判级意味着必须读齐本次授权筛选后的客户聚合集合。S1已实现后端`maxCandidates`容量保护（当前默认5000，容量性能仍待实测，不是业务分页上限）：授权候选CTE最多读取cap+1行并聚合；一旦超过cap，**整次查询受控拒绝**，不对截断集合返回匹配总数/风险页。不能LIMIT 20后再判级。页大小50不能代替总集合保护。独立单客户原因查询不扫描全范围。
 
 单次SQL超时、输出行数/内存预算均受限；历史扫描仍可能很大，必须独立测量和超时控制，不能用随意截断历史改变最近跟进口径。后续扩展SQL判级时需保持Java参考实现的等价性，不能为性能修改业务阈值。
 
@@ -153,15 +154,15 @@ SQL只聚合、Java判级意味着必须读齐本次授权筛选后的客户聚�
 
 ### 7.1 内部输入/输出
 
-| 数据结构（建议） | 内容与可信来源 |
+| 当前数据结构 | 内容与可信来源 |
 |---|---|
-| RiskQueryPlan | action、scopeIntent、queryMode、等级筛选、客户ID、page/size；Java验证后的不可变计划，不接受用户的T、等级或SQL上下文 |
-| RiskExecutionContext | authenticatedUserId、复核后的AccessContext、后端T、RuleSnapshot；不暴露为可绑定HTTP DTO |
+| AiAnalysisPlan / CustomerRiskRequest / CustomerRiskQuery | 分别承载模型语义候选、action/可选指纹、Java验证后的operation/mode/scope/客户等级筛选/客户ID/page/size；不能把候选当作授权计划，不接受用户的T、计算风险等级或SQL上下文 |
+| CustomerRiskAccessContext / RuleSnapshot | 后端复核的用户、销售角色、部门、授权/请求/有效范围及规则快照；不暴露为可绑定HTTP DTO |
 | CustomerRiskAggregate | Mapper最小投影，计数及有效时间必须一致，异常聚合拒绝假零 |
-| RiskAssessment | 客户最小信息、state、riskLevel、historyStatus、lastValidFollowAt、anchorType、elapsedDays、thresholdDays、excessDays、reasons、dataQuality |
-| RiskPageResult | 不可变排序后当前页、total、page/size/returned/pages、规范查询及执行上下文；不包含模型文本 |
+| CustomerRiskResult | 客户最小信息、state、riskLevel、history、时间锚点、elapsedDays、thresholdDays、excessDays、reasons、qualityHints；由Assembler映射到对外RiskRecordVO |
+| CustomerRiskPage | 不可变排序后当前页、total、page/size、实际范围、规则版本、分析时间和可信访问上下文；不包含模型文本 |
 
-业务公共方法建议为`analyze(trustedUserId, validatedPlan)`；T/规则从内部可信Context Factory获取，不允许HTTP/模型注入历史时间。Evaluator仅接收单客户聚合、T、RuleSnapshot，便于边界测试。两层Java输入不是“调用方构造即可信”：业务入口重新解析范围，核对与编排预期一致。
+核心公共方法为`analyze(trustedUserId, CustomerRiskQuery)`及带预期CustomerRiskAccessContext的兼容重载；核心Service通过Clock和CustomerRiskProperties.snapshot()固定T与规则，不允许HTTP/模型注入历史时间。Evaluator仅接收单客户聚合、T、RuleSnapshot。业务入口重新解析范围；Tool路径在Mapper查询前比较编排绑定的预期上下文。
 
 ### 7.2 确定性规则与排序
 
@@ -175,11 +176,11 @@ SQL只聚合、Java判级意味着必须读齐本次授权筛选后的客户聚�
 
 ### 7.3 后端配置与追溯
 
-建议`@ConfigurationProperties`前缀`crm.ai.risk.rules`，配置声明版本、a.mediumDays=14/a.highDays=30、others.mediumDays=30/others.highDays=60、never.observationDays=7/never.highDays=14。值为正整数、组内起点严格递增，所有组齐全、无未知组，声明版本非空；不允许模型覆盖。
+CustomerRiskProperties已使用`@ConfigurationProperties`前缀`crm.ai.risk.rules`，实际字段为version、a-medium-days=14/a-high-days=30、other-medium-days=30/other-high-days=60、never-medium-days=7/never-high-days=14及max-candidates=5000。规则快照校验阈值为正、组内起点递增、版本非空及容量边界；不允许模型覆盖。
 
-生成不可变RuleSnapshot；有效`ruleVersion=声明版本+规范配置SHA-256`，另保留configHash和规范化参数以便追溯。散列覆盖规则语义版本及会影响判定/排序的参数；同一声明标签下阈值变化也形成不同有效版本，不能沿用旧完整版本。发布记录归档无敏感信息的配置快照，本版只支持启动加载/重启生效，不设计热更新或规则表。
+生成不可变RuleSnapshot；有效`ruleVersion=声明版本:规范配置SHA-256`，快照同时保留规范化阈值参数，不另设configHash字段。散列覆盖规则语义版本及会影响判定/排序的参数；同一声明标签下阈值变化也形成不同有效版本。本版不设计热更新或规则表。
 
-请求开始取得同一个RuleSnapshot引用，判级、原因、超期、排序、计数及建议全部使用它；不在循环读取可变属性。配置非法则风险模块NOT_READY并返回503，不静默混默认值；采用模块就绪校验，不因新增风险配置错误改变V1判定逻辑。模块隔离的启动行为需S1验证，不能假定全局Bean校验失败仍可服务。
+每次核心查询取得同一个RuleSnapshot，判级、原因、超期、排序和计数使用该快照；建议只使用本次可信结果，不重新读取规则判级。配置非法则风险模块返回503/RISK_RULES_NOT_READY，不静默混默认值；采用模块边界校验而非启动时全局校验，S1相关离线测试已覆盖其与V1的隔离。
 
 ## 8. API与DTO/VO契约
 
@@ -187,17 +188,16 @@ SQL只聚合、Java判级意味着必须读齐本次授权筛选后的客户聚�
 
 | 方法/路径（新设计） | 用途 | 模型调用 | 权限 |
 |---|---|---|---|
-| POST /api/ai/risk-analysis | 自然语言清单、选中客户原因、明确索要建议 | 分类1次、Tool选择1次；建议可再1次 | 三权限+V2角色/范围 |
-| POST /api/customer-risks/analyses | 结构化LIST、REASON、SUGGESTIONS；分页及当前页建议 | LIST/REASON为0；SUGGESTIONS至多1次 | 完全相同三权限+V2角色/范围 |
-| POST /api/ai/analysis（既有） | V1总量/等级分布 | 原有流程不变 | 原双权限及V1.1范围，不增加follow:list |
+| POST /api/customer-risks/analyses | 结构化LIST、REASON、SUGGESTIONS；S2-A建议保持未就绪 | 全部为0，B3不自动接入建议 | 完全相同三权限+V2角色/范围 |
+| POST /api/ai/analysis（统一） | V1统计；开启风险开关后B2查询/B3建议 | V1和风险LIST/REASON各2次；非空风险建议最多3次；关闭风险仅1次分类 | Controller原双权限；风险分支额外三权限/角色/范围 |
 
-新Controller内部路径省略/api前缀。两个新POST均为只读分析，不创建持久化analysis资源；无需独立的FollowRecord详情API、导出或批量任意ID接口。V1成功仍为AiAnalysisVO，不能把它改成风险联合响应或统一data包装。
+Controller内部路径省略/api前缀。保留两个已存在的只读入口，不创建持久化analysis资源。V1成功JSON保持AiAnalysisVO原结构；统一聊天Service/Controller通过AiAnalysisResponse返回实际AiAnalysisVO或RiskAnalysisVO，无外层data/payload包装；风险成功VO要求开关开启及V2授权通过。
 
 ### 8.2 客户端输入
 
 | DTO（建议） | 白名单字段 | 规则 |
 |---|---|---|
-| AiRiskAnalysisRequest | question、page、size、customerId | question非空白≤1000；page默认1，size默认20且≤50；customerId仅单客户原因且由用户选中明确提供 |
+| AiAnalysisRequest | question；风险可选page、size、customerId、expectedResultFingerprint | 保留question非空白≤1000及V1额外字段忽略；风险分支严格白名单，REASON只允许字符串customerId，清单默认1/20，指纹只供SUGGESTIONS使用 |
 | CustomerRiskRequest | action、scopeIntent、queryMode、customerLevels、page、size、customerId、expectedResultFingerprint | action=LIST/REASON/SUGGESTIONS；scope默认CURRENT_AUTHORIZED，仅SELF/DEPT显式；queryMode默认PRIORITY或ALL_STATES；等级集合只含A/B/C/D/UNRATED，空数组非法，null或省略表示不限等级 |
 
 操作条件：LIST/SUGGESTIONS禁止customerId；REASON必须customerId且不接受queryMode/customerLevels/page/size/指纹，不因默认PRIORITY而屏蔽低关注或特殊状态原因。SUGGESTIONS指定规范清单条件重新计算当前页，不能上传上一页的客户数组、等级、原因或模型事实。expectedResultFingerprint仅允许SUGGESTIONS，可用于旧页提示；默认空，不作为权限凭据。
@@ -210,7 +210,7 @@ SQL只聚合、Java判级意味着必须读齐本次授权筛选后的客户聚�
 
 ### 8.3 服务器输出
 
-新入口均直接返回RiskAnalysisVO，不增加V1包装。V2 DTO/VO局部采用明确的null字段序列化约定，必填可空字段也输出null；不得依赖当前全局NON_NULL造成前端必填字段缺失，不修改全局配置。
+统一聊天入口按互斥intent返回现有AiAnalysisVO或RiskAnalysisVO；S2-A仍直接返回RiskAnalysisVO。AiAnalysisResponse只是Java类型，无额外序列化字段。V2 DTO/VO局部采用明确的null字段序列化约定，必填可空字段也输出null；不得依赖当前全局NON_NULL造成前端必填字段缺失，不修改全局配置。
 
 | 结构 | 字段及约束 |
 |---|---|
@@ -221,7 +221,7 @@ SQL只聚合、Java判级意味着必须读齐本次授权筛选后的客户聚�
 | records[] | customerId、customerNo、customerName、customerLevel（A/B/C/D/null）、customerStatus、state、riskLevel、historyStatus、lastValidFollowAt、anchorType、elapsedDays、thresholdDays、excessDays、reasons、dataQuality |
 | reasons[] | code、message（Java）、evidence{anchorTime,elapsedDays,thresholdDays,levelGroup}；levelGroup=A/OTHER/NEVER，不能冒充另一个独立风险 |
 | dataQuality | status=CLEAN/HAS_ANOMALIES、codes[]；不含原始跟进正文或跨客户ID |
-| advice | status=NOT_REQUESTED/AVAILABLE/UNAVAILABLE/NOT_APPLICABLE、source=null/QWEN_STRUCTURED、unavailableCode（可空）、message（可空）、items[]；items为customerId/actions，actions为受控code和Java渲染text |
+| advice | status=NOT_REQUESTED/AVAILABLE/UNAVAILABLE/NOT_APPLICABLE、source=null/QWEN_ACTIONS_JAVA_TEMPLATE、unavailableCode（可空）、message（可空）、items[]；成功项为customerId、actions（动作码字符串数组）、reasonKeys和Java渲染的suggestion |
 
 state=NORMAL才有riskLevel；OBSERVING/DATA_REVIEW为特殊状态，不把它们编码进riskLevel。全局status=PARTIAL仅表示可信分析成功、已请求的建议失败；未请求建议为SUCCESS/NOT_REQUESTED，空清单请求建议为SUCCESS/NOT_APPLICABLE。无匹配时records=[]、total=0、returned=0、pages=0；页码超出末页也返回空records但保留真实total，不伪装匹配总数为0。REASON成功仅一条，未找到则404而不是空清单。
 
@@ -245,7 +245,13 @@ state=NORMAL才有riskLevel；OBSERVING/DATA_REVIEW为特殊状态，不把它�
 {"action":"REASON","scopeIntent":"SELF","customerId":"2300000000000000001"}
 ```
 
-为当前页请求建议：
+通过统一聊天为当前页请求B3建议（queryMode与客户等级仍由问题分类，不由客户端传入可信计划）：
+
+```json
+{"question":"给出本人范围内需要重点关注客户的跟进建议","page":1,"size":20,"expectedResultFingerprint":"此前服务器返回的指纹"}
+```
+
+S2-A结构化建议请求仍合法，但只返回确定性结果及建议未就绪状态，不调用建议模型：
 
 ```json
 {"action":"SUGGESTIONS","scopeIntent":"SELF","queryMode":"PRIORITY","page":1,"size":20,"expectedResultFingerprint":"此前服务器返回的指纹"}
@@ -266,7 +272,7 @@ state=NORMAL才有riskLevel；OBSERVING/DATA_REVIEW为特殊状态，不把它�
     "requestedScope": "SELF",
     "analysisTime": "2026-10-18T20:30:00+08:00",
     "timezone": "Asia/Shanghai",
-    "ruleVersion": "V2.0-1+0000000000000000000000000000000000000000000000000000000000000000",
+    "ruleVersion": "V2.0-1:0000000000000000000000000000000000000000000000000000000000000000",
     "consistency": "LIVE_REQUEST_SNAPSHOT"
   },
   "normalizedQuery": {"scopeIntent":"SELF","queryMode":"PRIORITY","customerLevels":null,"page":1,"size":20},
@@ -308,7 +314,7 @@ state=NORMAL才有riskLevel；OBSERVING/DATA_REVIEW为特殊状态，不把它�
 正常AVAILABLE片段示例（同一受控页面映射，不含模型自造ID）：
 
 ```json
-{"status":"AVAILABLE","source":"QWEN_STRUCTURED","unavailableCode":null,"message":null,"items":[{"customerId":"2300000000000000001","actions":[{"code":"VERIFY_CURRENT_NEEDS","text":"先确认客户当前需求及是否有变化。"}]}]}
+{"status":"AVAILABLE","source":"QWEN_ACTIONS_JAVA_TEMPLATE","unavailableCode":null,"message":"辅助建议仅供参考，请人工核实后决定是否执行。","items":[{"customerId":"2300000000000000001","actions":["VERIFY_CURRENT_NEEDS"],"reasonKeys":["FOLLOW_GAP"],"suggestion":"建议先核实客户当前需求，再由销售人员决定联系安排。"}]}
 ```
 
 ## 9. Spring AI Tool设计
@@ -317,30 +323,29 @@ state=NORMAL才有riskLevel；OBSERVING/DATA_REVIEW为特殊状态，不把它�
 
 Factory每请求创建实例，绑定真实用户ID、ValidatedPlan及预期范围。用户/分页/ID等先按第8节验证；S1业务服务再验证，不把Factory当唯一安全边界。Tool自身使用NOT_EXECUTED→RUNNING→SUCCEEDED/FAILED状态，失败也不得再次调用。业务入口获取可信执行上下文，不能接受未核验的外部权限对象；同一个请求最多一个业务Tool、一次风险聚合，权限/对象复核的批量读取不计为第二次风险统计。
 
-Java检查单一function调用、精确工具名、arguments严格空对象且无重复键/尾随内容。模型伪造customerId、userId、deptId、role、scope、page、SQL等均在执行业务前拒绝；未知工具或未调用502，重复调用409，非法参数400。手动执行后校验实际范围、模式、客户ID/分页与绑定计划一致，所有记录/原因和建议使用业务执行上下文的同一T与规则版本，不能返回不同范围的成功结果。
+Java检查单一function调用、精确工具名、arguments严格空对象且无重复键/尾随内容。模型伪造customerId、userId、deptId、role、scope、page、SQL等均在执行业务前拒绝；B2实际实现对未知/缺失/多个调用和非法参数统一返回502/AI_MODEL_RESPONSE_INVALID，直接重复执行请求级Tool为既有409工具重复语义。手动执行后校验实际范围、客户ID/分页与绑定计划一致，所有记录/原因和建议使用业务执行上下文的同一T与规则版本，不能返回不同范围的成功结果。
 
-Tool返回RiskPageResult给Java编排；关闭`internalToolExecutionEnabled`，不把完整Tool结果再次交给模型自由解释。建议阶段只发送新的最小投影。结构化接口直接调用同一Risk Service而不伪造一次模型/Tool请求；其安全验证与自然语言入口等价。
+Tool返回CustomerRiskPage给Java编排；关闭`internalToolExecutionEnabled`，不把完整Tool结果再次交给模型自由解释。建议阶段只发送新的最小投影。结构化接口直接调用同一Risk Service而不伪造一次模型/Tool请求；其安全验证与自然语言入口等价。
 
 ## 10. Qwen意图路由与建议编排
 
-### 10.1 V1/V2的明确分流
+### 10.1 统一无Tool分类与业务分派（B1/B2当前协议）
 
-| 语义 | 入口及行为 |
-|---|---|
-| 客户总量CUSTOMER_TOTAL | 原/api/ai/analysis，旧双权限和统计Tool，不要求follow:list |
-| 等级分布CUSTOMER_GRADE_DISTRIBUTION | 同上，原VO不变 |
-| 风险清单/单客户原因/建议 | 新V2入口先准入，再分类和风险Tool |
-| V2入口收到V1统计问题 | 422 RISK_USE_STATISTICS_ENDPOINT，提示使用统计入口；不悄然调用旧Tool |
-| V1入口收到风险问题 | 按旧支持边界拒绝；不注册风险Tool或提前查明细。是否在未来统一入口属于另一次兼容性变更 |
-| 历史回溯、计划逾期、写入、指定其他人/部门、模糊对象 | 受控422/澄清，不查业务明细 |
+| businessType | 精确模型字段 | Java语义 |
+|---|---|---|
+| STATISTICS | businessType、intent、timeRange、queryScopeIntent | intent为CUSTOMER_TOTAL/CUSTOMER_GRADE_DISTRIBUTION；时间为原四枚举；范围为原五枚举 |
+| RISK | businessType、riskIntent、queryScopeIntent、queryMode、customerLevels | riskIntent=LIST/REASON/SUGGESTIONS；queryMode=PRIORITY/ALL_STATES；customerLevels为null或非空客户等级数组 |
+| UNSUPPORTED | businessType、reason | reason=OUT_OF_SCOPE/MIXED/AMBIGUOUS；不执行任何业务 |
 
-推荐交互层明确选择统计/关注分析入口，后续S3处理，不凭角色隐藏替代后端权限。模型家族标签本身绝不是授权：即便误分类，V1只能返回授权统计，V2每个读取仍必须通过准入。语义误路由属于正确性问题，需测试，不能因“未越权”就算成功。
+除customerLevels外字段均为字符串，严格拒绝缺失、未知字段、重复JSON键、尾随内容、非法枚举或分支字段混用。不接受用户ID、角色、部门、授权范围、风险等级、阈值、SQL或规则版本。模型失败503、协议错误502、不支持422，均不默认回退统计。统计与风险混合请求必须MIXED，不能只执行其中一部分。
 
-V2分类无业务工具，严格输出六字段：`intent`、`scopeIntent`、`queryMode`、`customerLevels`、`timeIntent`、`targetMode`。intent白名单为三个RISK意图、两个V1统计意图及UNSUPPORTED；scope使用已有请求范围语义；queryMode=PRIORITY/ALL_STATES；等级为白名单数组或null；timeIntent=CURRENT_SNAPSHOT/HISTORICAL/UNSUPPORTED；targetMode=NONE/SELECTED。不能输出userId、customerId、实际dataScope或自然语言统计数字。除customerLevels外其余字段为枚举字符串；严格拒绝额外字段、非法值、重复键及尾随JSON。
+统一分类由AiIntentRouter完成；STATISTICS结果直接交给独立统计编排，继续唯一统计Tool Calling和Java手动执行，成功仍恰好两次模型调用。原统计Tool Schema、范围复核、结果校验和AiAnalysisVO.from()保持不变。
 
-Java将结果转换为ValidatedPlan：仅明确请求全状态才允许ALL_STATES；历史/自定义时间与不支持语义422，原因要求HTTP选中ID及targetMode=SELECTED，其余模式不得带ID。具体语言歧义不能靠客户端声称已校验绕过，应澄清/拒绝；分类仍有抽样准确性限制，不能宣称所有同义表达确定正确。
+当前RISK在开关关闭时止于分类，不做第二次Tool Calling或风险读取；开启并通过V2授权后执行B2风险Tool，SUGGESTIONS再按B3条件附加建议。风险分支不调用统计Service或回退统计，也不通过CustomerRiskAnalysisService重复查询。UNSUPPORTED沿用原能力范围错误契约。
 
-V2自然语言成功最多分类1次、工具选择1次、建议1次；没有模型循环、工具重试或逐客户模型请求。单客户原因的解释由Java证据生成，非必须再调用模型。分类/工具阶段失败尚无可信结果时返回相应4xx/502/503；不要误标成已有结果的部分成功。
+B2已扩展风险分类候选为恰好businessType/riskIntent/queryScopeIntent/queryMode/customerLevels五字段，customerLevels为null或非空A/B/C/D/UNRATED数组，其他字段为字符串。原因对象ID由HTTP明确选择，不能来自模型，缺失/歧义需澄清。统一前端由B4根据后端intent渲染，无需先判定V1/V2。
+
+B2风险成功最多统一分类1次、风险Tool选择1次，B3请求建议可再1次；不添加额外V1分类，不开启无界循环或逐客户模型调用。
 
 ### 10.2 建议的事实保护与降级
 
@@ -351,6 +356,20 @@ V2自然语言成功最多分类1次、工具选择1次、建议1次；没有模
 严格检查输出JSON、别名唯一性、动作/原因白名单、每项数量与整体覆盖；任一非法或缺失导致本次页建议整体UNAVAILABLE，保留风险结果。Java按原页顺序映射真实ID并渲染只描述待核实动作的文案；不接受模型提供的数字、日期、等级、排序、客户事实或原始自由文本。因此防止的是模型修改可信结果，并通过受控模板减少虚构业务事实，不宣称任意自然语言可被完美事实校验。
 
 建议客户端缺失、超时、模型错误、协议异常、超输入预算均返回分析HTTP 200/PARTIAL+advice.UNAVAILABLE；空页无需模型，NOT_APPLICABLE。模型前/后权限失败不是可降级的模型错误，必须终止整个响应而非带旧客户返回。受控动作方案与需要多少模板/是否后续开放自由文案属于架构评审点，不改变“模型负责辅助建议、Java负责风险”的业务分工。
+
+### 10.3 B3实际建议闭环与兼容边界
+
+只有统一聊天RISK_SUGGESTIONS进入RiskAdviceService。LIST/REASON保留两次模型；非空建议请求最多三次；空页只复核当前权限，不调用建议模型或对象SQL。S2-A仍由确定性Assembler组装，建议保持PARTIAL/UNAVAILABLE/RISK_ADVICE_NOT_READY，不新增模型调用。
+
+RiskAdviceInput仅投影当前页alias、客户等级、state/riskLevel/history、elapsedDays/thresholdDays和reasonKeys，不包含真实ID、姓名、原问题或授权元数据。提示词按资源加载，并通过原始消息传入。模型输出为单个对象`{"items":[{"alias":"r1","actions":["VERIFY_CURRENT_NEEDS"],"reasonKeys":["NEVER_FOLLOWED"]}]}`；严格拒绝额外字段、重复键、尾随内容、未知/重复/缺失客户、非法动作及原因。每个客户恰好一条、1到3个不同动作，原因集合必须与输入完全相同；DATA_REVIEW只允许VERIFY_DATA，其余状态禁止该动作。Java按可信输入顺序映射真实ID并渲染模板，不接受自由文本建议或模型事实。
+
+不改变原advice根结构：成功为SUCCESS / AVAILABLE，source=QWEN_ACTIONS_JAVA_TEMPLATE；items包含customerId、actions、reasonKeys、suggestion。失败为PARTIAL / UNAVAILABLE，稳定代码RISK_ADVICE_UNAVAILABLE、INPUT_LIMIT、BUSY、TIMEOUT、NOT_READY（均带RISK_ADVICE_前缀）；空页保持NOT_APPLICABLE。不可变复制原VO，仅替换全局status与advice，原records、分页、T、指纹和原因不变。
+
+CustomerRiskAdviceAccessVerifier在建议前后各开一个REQUIRES_NEW只读短事务，重新验证三权限和完整上下文；每次对当前页一次批量selectVisibleCustomers，读取ID/ownerId/负责人部门/status，复用原可见性与POTENTIAL/ACTIVE、负责人有效条件，不关联跟进表。可见性缺失或归属/状态前后变化409，权限/角色/部门/范围变化403；即使模型失败也执行返回前复核，绝不以PARTIAL夹带旧数据。只保证两次短快照采样时的检查，不能消除最终复核后直到HTTP送达期间的全部TOCTOU竞态。
+
+建议独立同步HTTP客户端复用Qwen配置，连接2秒、动态读取超时至多8秒、无重试、输出至多4000 token、并发至多4个且不排队；没有后台Future任务。默认当前页至多50人、提示词加输入至多12000 UTF-8字节（保守容量门槛，非实测token数）、响应至多24000字符；超限整页降级，不拆批或静默遗漏。统一入口以单调时钟计算55秒软预算，建议开始时扣除已耗时和3.5秒最终复核预留，剩余不足则降级；并非对全部既有数据库/网络阶段的硬中断保证。风险聚合仍一次，非空建议多两次批量可见性查询；这些不是第二次聚合。
+
+前端AI请求仍60秒，原分类与工具客户端读取各20秒。B3没有修改前端，也不宣称三次调用必在60秒完成；预算及本地合成HTTP超时测试不能替代真实Qwen/MySQL性能验收，B4需统一端到端超时与用户反馈。单机Semaphore不是分布式限流。
 
 ## 11. 分页、性能、一致性与异常
 
@@ -364,42 +383,39 @@ V2自然语言成功最多分类1次、工具选择1次、建议1次；没有模
 
 为“当前页建议”提供`resultFingerprint`：服务器对规范查询、操作者/范围归属、完整规则版本、已排序当前页可信记录及匹配总数做规范摘要，**不包含T本身**（T每次变化），也不把摘要当授权令牌。SUGGESTIONS重新取当前T并计算；若提交的expectedResultFingerprint不符，409要求刷新，不发送过期页给模型。若一致则对新快照结果生成建议并返回新T，页面应更新上下文。记录/分级/页序因时间跨阈值或数据变化会改变指纹。该机制检测可见结果变化，不提供旧数据读取，也不能代替三权限与对象校验。
 
-### 11.2 资源控制建议（待测量）
+### 11.2 当前资源控制与待测量边界
 
-| 资源 | 设计建议 | 失败行为 |
+| 资源 | 当前实现 | 失败行为 |
 |---|---|---|
-| page/size | 默认1/20，size≤50；无动态sort、任意ID数组 | 非整数/越界400，不能静默裁成合法值 |
-| 授权客户聚合 | maxCandidates建议5000，cap+1检测，历史不截断；单原因只查目标客户 | 超容量503 RISK_CAPACITY_EXCEEDED，禁止返回不完整总量 |
-| SQL | 参数化、一次聚合、固定数量权限/批量对象复核；建议查询超时5秒起点评估 | 受控查询错误，不用空页或0替代 |
-| 建议模型 | 一页最多50别名，单次输入建议≤12k token、输出≤4k token，至多3个动作/客户；不隐式截断页或分成无界调用 | 超输入限额/输出截断均建议UNAVAILABLE，保留风险；不自动重试 |
-| 模型阶段 | 自然语言最多3次，结构化建议最多1次；连接5秒、单次读取20秒为评估起点 | 不发无限后续调用；建议阶段超时降级，分类/Tool阶段503 |
-| 总请求与并发 | 新V2独立超时预算，建议服务端85秒/前端95秒起点评估；对用户/全局模型并发设有界限额 | 429繁忙或阶段受控超时；已有核心结果的建议限流转UNAVAILABLE |
+| page/size | 默认1/20，size≤50；无动态sort、任意ID数组 | S2-A非法格式/边界400；自然语言风险查询计划非法422；不静默裁剪 |
+| 授权客户聚合 | 默认maxCandidates=5000，cap+1检测，历史不截断；单原因只查目标客户 | 超容量503/RISK_CAPACITY_EXCEEDED，禁止返回不完整总量 |
+| SQL | 参数化，一次核心聚合，建议前后各一次当前页批量复核；聚合SQL timeout=10秒，批量复核SQL timeout=3秒 | 查询失败整体拒绝，不用空页或PARTIAL替代；驱动及真实执行时限需实测 |
+| 建议模型 | 默认最多50客户；Prompt加输入≤12000 UTF-8字节；提供方输出≤4000 token且Java校验≤24000字符，每客户1–3动作 | 超预算整页UNAVAILABLE，不隐式截断、拆批或重试 |
+| 模型阶段 | 分类/Tool客户端连接5秒、读取20秒；建议独立连接2秒、读取至多8秒；风险建议最多3次模型，S2-A为0次 | 分类/Tool失败503；建议阶段失败降级，授权失败整体拒绝 |
+| 总预算与并发 | 统一入口记录55秒软预算，建议按剩余预算准入；建议单JVM并发默认4、不排队；前端AI超时仍60秒 | 建议忙或预算不足返回200/PARTIAL/UNAVAILABLE，不是已实现HTTP 429或硬截止时间 |
 
-以上5000、SQL/模型预算和超时是**工程评审起点，非实测性能结果或已冻结业务阈值**；S1/S2需用代表性规模定额，保持PRD的20/50和先算后分页不变。前端V2超时不得改旧V1 60秒配置；服务端传递剩余截止时间，不只让浏览器断开而后台无限等待。客户端取消与连接超时的实际中断能力需单独测试，不承诺仅靠线程中断一定停止阻塞调用。
+以上为当前默认保护值，**不是生产性能验收或端到端硬SLA**。初版85秒/95秒预算和分布式/每用户限流建议并未实施；B4需基于当前同步调用与前端60秒限制核对交互和超时反馈，不能声称已自动扩展。客户端取消、数据库容量和真实模型耗时仍待独立验证，保持PRD的20/50及先算后分页不变。
 
 ### 11.3 ProblemDetail与部分成功
 
-新模块Advice仅绑定两个新Controller，复用安全入口401/403与RFC 7807形式，不改变旧Advice。建议映射：
+CustomerRiskExceptionHandler仅绑定AiCustomerRiskController。共享聊天Advice显式处理CustomerRiskException并复用同一状态/code映射，不能落入V1通用500；不要把两个有通用兜底的Advice同时绑定共享Controller。保留V1所有既有异常契约。B4应使用当前实际映射：
 
 | HTTP | code | 情况与结果 |
 |---|---|---|
-| 400 | RISK_REQUEST_INVALID | 请求格式、未知字段、分页、ID、枚举非法；无业务结果 |
-| 401 | UNAUTHORIZED / RISK_AUTHENTICATION_REQUIRED | 未认证/可信主体缺失 |
-| 403 | RISK_ACCESS_DENIED | 三权限、角色、用户状态或角色范围配置不符 |
-| 403 | DATA_SCOPE_CONFIGURATION_ERROR | 复用Resolver的无授权/缺部门异常 |
+| 400 | AI_REQUEST_INVALID / RISK_REQUEST_INVALID | 分别为统一聊天请求格式/校验及S2-A严格请求非法 |
+| 401 | UNAUTHORIZED / AI_AUTHENTICATION_REQUIRED / RISK_AUTHENTICATION_REQUIRED | 安全入口未认证或相应服务缺少可信主体 |
+| 403 | FORBIDDEN / RISK_ACCESS_DENIED | 公共权限或V2三权限、角色、用户状态及范围配置不符；风险策略内部Resolver失败转RISK_ACCESS_DENIED |
 | 403 | RISK_ACCESS_CONTEXT_CHANGED | Tool前或模型前后权限、角色、部门/范围改变 |
 | 404 | RISK_CUSTOMER_NOT_FOUND | 单客户不存在/不可见/不适用，统一说明 |
 | 409 | RISK_RESULT_STALE | 当前页条件指纹不符，或页内对象在执行期间改变；无旧页返回 |
-| 409 | RISK_TOOL_REPEATED | 多Tool或重复执行，不能二次读取 |
+| 409 | AI_TOOL_REPEATED | 直接重复执行请求级Tool；风险多调用模型响应在执行前按502拒绝 |
 | 422 | RISK_SCOPE_UNSUPPORTED | ALL、销售DEPT等语义范围不合法 |
 | 422 | RISK_QUERY_UNSUPPORTED / RISK_CUSTOMER_SELECTION_REQUIRED | 历史/计划/写操作等不支持、对象需选择或歧义需澄清 |
-| 422 | RISK_USE_STATISTICS_ENDPOINT | 风险入口收到V1统计需求，返回使用旧入口的安全说明 |
-| 400 | RISK_TOOL_ARGUMENT_INVALID | 非空或非法Tool arguments，业务前拒绝 |
-| 502 | RISK_MODEL_RESPONSE_INVALID | 分类/Tool协议失败或可信结果上下文不一致，未生成可返回核心结果 |
-| 503 | RISK_MODEL_UNAVAILABLE / RISK_AI_NOT_READY | 分类/Tool阶段模型失败或未启用 |
+| 422 | AI_ANALYSIS_UNSUPPORTED / AI_RISK_CHAT_DISABLED | 统一分类不支持、混合/不明确需求，或风险聊天开关关闭；不回退统计 |
+| 502 | AI_MODEL_RESPONSE_INVALID | 分类或Tool协议非法（含非空参数、未知/多个工具），或可信结果上下文不一致 |
+| 503 | AI_MODEL_UNAVAILABLE / AI_ANALYSIS_NOT_READY | 分类/Tool模型失败或客户端未就绪；AI_RISK_CHAT_NOT_READY仅保留B1历史异常映射 |
 | 503 | RISK_RULES_NOT_READY / RISK_CAPACITY_EXCEEDED | 规则配置不可用或集合容量超过保护值 |
-| 429 | RISK_TOO_MANY_REQUESTS | 尚未执行核心查询前资源准入限流 |
-| 500 | RISK_QUERY_FAILED / RISK_ANALYSIS_FAILED | 数据查询/聚合不一致/其他安全封装异常，不外露SQL |
+| 500 | RISK_QUERY_FAILED / RISK_ANALYSIS_FAILED / AI_ANALYSIS_FAILED | 风险领域数据错误、S2-A兜底或聊天兜底异常，不外露SQL |
 | 200 | status=PARTIAL、advice.UNAVAILABLE | 核心成功、建议失败/限流/预算不足；保留真实records/total，不返回ProblemDetail代替整个结果 |
 
 建议失败的unavailableCode取RISK_ADVICE_UNAVAILABLE、RISK_ADVICE_INPUT_LIMIT或RISK_ADVICE_NOT_READY等受控值，不返回模型原文错误。空结果不是异常，不使用206分段内容或把模型失败报为“没有关注客户”。
@@ -418,7 +434,7 @@ V2自然语言成功最多分类1次、工具选择1次、建议1次；没有模
 
 ## 13. 测试与验收设计
 
-以下均为后续计划，本次未执行或宣称通过V2测试。
+下表保留分层验收范围。B1/B2/B3已完成相应离线验证，最后一次后端离线回归为676项通过、打包成功，前端离线5项通过，详见[归档B3报告](../historical/AI_AGENT_V2_S2_B3_IMPLEMENTATION_REPORT.md)。这些是历史执行记录，本次文档整理未重跑测试；真实Qwen/MySQL、容量/性能及B4前端E2E仍未验收。
 
 | 层级/场景 | 必测点 | 阶段与方法 |
 |---|---|---|
@@ -437,18 +453,20 @@ V2自然语言成功最多分类1次、工具选择1次、建议1次；没有模
 | 并发与一致性 | 两阶段授权/部门/owner变化、单次同T同规则、指纹不符409、跨页变更LIVE语义，取消不无限后台运行 | S2-A/B受控集成 |
 | 旧版本回归 | AiAnalysisService/Tool/Controller、CustomerStatisticsService、ScopePolicy、DataScopeResolver旧测试，管理员ALL及多角色默认原语义 | 各阶段运行直接受影响用例，不删旧断言 |
 | 真实SQL与模型 | 在正式状态过滤/阈值下重新独立对账；模型只少量代表性清单/原因/建议/拒绝请求 | S4显式授权环境，记录真实与Mock差异 |
-| 前后端E2E | 经理DEPT/SELF、全状态特殊状态、三权限/管理员拒绝、页大小/总数、建议失败仍显示Java结果、指纹变化刷新 | S3前端接入后，S4浏览器验收 |
+| 前后端E2E | 经理DEPT/SELF、全状态特殊状态、三权限/管理员拒绝、页大小/总数、建议失败仍显示Java结果、指纹变化刷新 | B4前端接入后，S4浏览器验收 |
 
 S4需准备授权测试环境的异常/交接/排序样本；本次不插入或修复数据，也不复用R1含INACTIVE的290总量当冻结规则答案。真实登录会更新审计字段，后续验收须核对授权和副作用；D1不登录、不访问数据库、不跑真实Qwen。
 
-## 14. 后续实施拆解与退出条件
+## 14. 阶段实施与退出条件
 
 | 阶段 | 实施范围 | 退出条件与禁止提前扩展 |
 |---|---|---|
 | V2-S1 | 安全准入/范围策略、规则快照/配置、只读聚合Mapper、纯Evaluator/Comparator、风险Service及内部结果；最小对象读取 | 无模型和新HTTP入口也能独立正确判级、过滤、分页；三权限及对象边界单测/SQL验证；不开发完整Follow CRUD |
 | V2-S2-A | 独立Controller、严格DTO/VO、模块Advice、结构化LIST/REASON及HTTP合同，建议状态契约 | MockMvc覆盖三权限/角色/404/分页及V1兼容；未接建议时明确NOT_READY/UNAVAILABLE，不假称建议可用；不改旧入口授权 |
-| V2-S2-B | 自然语言分类、空参数Tool/Factory、绑定计划及结果检查、当前页Qwen动作建议/降级、模型预算 | Mock覆盖注入/隔离/误路由/建议失败；最多一次Tool，不无界模型调用；不默认为真实联调通过 |
-| V2-S3（后续） | 前端选择统计/关注入口、查询/分页/原因/建议及特殊状态展示 | 不用前端控件代替后端授权，不把全状态解释为ALL或INACTIVE |
+| V2-S2-B1 | 统一自然语言入口、无Tool路由、V1统计编排迁移、共同响应接口、风险默认关闭、分支异常映射 | V1两次调用及JSON兼容；RISK/混合/协议错误均不触发业务；S2-A回归 |
+| V2-S2-B2 | 内部风险编排、零参数风险Tool/Factory、可信计划、上下文与对象复核、复用映射/指纹 | 仅合法分支注册Tool，最多一次风险聚合；无独立聊天Controller |
+| V2-S2-B3 | 已实现受约束Qwen建议、单机预算/并发保护、建议失败降级 | 合法核心结果保留；权限失败不可PARTIAL；S2-A仍保持建议未就绪，不自动接入模型 |
+| V2-S2-B4 | 统一聊天前端按intent渲染统计/风险，分页、原因、建议、部分成功与指纹提示 | 前端不识别意图决定后端业务，不以隐藏按钮代替授权，联合端到端验收 |
 | V2-S4（后续） | 授权环境真实MySQL/Qwen/浏览器与性能验收 | 独立SQL、边界数据、模型/界面证据、容量/超时达标后才称V2验收 |
 
 S1/S2-A不能把后续模型未接入包装成全功能完成；结构化SUGGESTIONS若在S2-A暴露，仍须先计算可信结果后返回advice.UNAVAILABLE/RISK_ADVICE_NOT_READY，而非200假建议或丢弃核心结果。每阶段遵循最小回归，出现必须修改冻结业务规则时停止对应实现并报告。
@@ -457,12 +475,12 @@ S1/S2-A不能把后续模型未接入包装成全功能完成；结构化SUGGEST
 
 未发现需暂停整体设计的关键PRD矛盾。以下是技术评审点，不重新询问已冻结的角色、阈值、INACTIVE排除、排序优先级或分页默认值：
 
-1. 是否采纳独立V2自然语言+结构化两个入口，以及与旧统计界面的明确分流；若选共享入口，必须接受分支授权与联合契约改造成本。
-2. 是否接受专用只读Mapper、共享过滤外加V2限制、SQL聚合+Java全集合判级方案；maxCandidates初值及超容量行为需规模验证。
-3. 是否采纳一个零参数Tool、内部不可变查询计划、Service独立复核及模型前后批量可见性检查；确认短事务与并发授权边界。
-4. 是否采纳按需分阶段建议、结构化动作+模板渲染，动作清单/模板覆盖是否足够；若要求自由建议文本，应单列额外事实一致性风险及验证，不承诺用简单字符串检查解决。
-5. 是否接受启动不可变规则快照、有效版本含配置摘要、模块NOT_READY隔离，以及ID数值升序/特殊状态后置的技术约定。
-6. 是否接受LIVE_REQUEST_SNAPSHOT跨页语义与当前页指纹重算，不提供历史快照；若要求跨请求固定结果，需要另行明确存储与权限撤销设计。
-7. 确认DTO/VO、错误码、null序列化、资源与超时评估值，形成S1/S2测试预算；这些参数不是已测性能结论。
+1. 已确认统一自然语言聊天入口，保留S2-A结构化入口；公共双权限、风险分支额外准入及已有VO联合返回按本修订实施。
+2. 已采用专用只读Mapper、共享过滤外加V2限制、SQL聚合+Java全集合判级；maxCandidates默认保护与超容量拒绝已有实现，规模性能待验证。
+3. 已采用一个零参数Tool、不可变查询、核心Service查询前上下文复核及建议前后批量对象复核；短事务之间仍有已记录的并发边界。
+4. B3已采用结构化动作+Java模板，仅统一聊天SUGGESTIONS生成；建议质量与模板覆盖需人工/真实模型验证，自由文本不是当前协议。
+5. 已采用每次查询不可变规则快照、版本摘要、风险模块NOT_READY隔离、ID数值升序及特殊状态后置；不新增规则热更新。
+6. 当前为LIVE_REQUEST_SNAPSHOT与指纹重算，不提供跨页历史快照；未来若要求固定快照需独立设计。
+7. B4应复用现有DTO/VO、实际错误码和null语义，核对预算与前端渲染；保护参数与离线回归均不代表真实环境性能结论。
 
-设计已覆盖D1任务的架构、权限、数据、规则、API、Tool、模型、分页及测试拆解。下一步是人工架构评审；本文不授权提前进入V2-S1/S2实现。
+B1/B2/B3代码已按阶段实施；风险聊天默认关闭，B3等待人工验收，B4另行实施。本次修订不改变冻结规则，也不重写S2-A历史验收事实；真实模型、数据库和性能验证仍需独立证据。
