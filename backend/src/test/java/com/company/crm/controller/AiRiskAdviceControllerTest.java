@@ -37,7 +37,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 /** Real unified entry, router, risk tool, core service, evaluator and assembler; mock model/SQL only. */
-@WebMvcTest({AiAnalysisController.class, AiCustomerRiskController.class})
+@WebMvcTest({AiAnalysisController.class, CustomerRiskController.class})
 @Import({SecurityConfig.class, JwtAuthenticationFilter.class, RestAuthenticationEntryPoint.class,
     RestAccessDeniedHandler.class, AiAnalysisExceptionHandler.class, CustomerRiskExceptionHandler.class,
     AiAnalysisServiceImpl.class, AiIntentRouter.class, AiRiskAnalysisServiceImpl.class,

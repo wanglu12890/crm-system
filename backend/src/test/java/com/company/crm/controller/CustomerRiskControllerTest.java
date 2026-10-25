@@ -30,11 +30,11 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 /** Real HTTP parsing, method security, application service, S1 service and policy; database reads are mocked. */
-@WebMvcTest(AiCustomerRiskController.class)
+@WebMvcTest(CustomerRiskController.class)
 @Import({SecurityConfig.class, JwtAuthenticationFilter.class, RestAuthenticationEntryPoint.class,
         RestAccessDeniedHandler.class, CustomerRiskExceptionHandler.class, CustomerRiskAnalysisServiceImpl.class,
         CustomerRiskResponseAssembler.class, CustomerRiskServiceImpl.class, CustomerRiskAccessPolicy.class, CustomerRiskEvaluator.class, CustomerRiskProperties.class})
-class AiCustomerRiskControllerTest {
+class CustomerRiskControllerTest {
     @Autowired MockMvc mvc;
     @Autowired ObjectMapper json;
     @MockBean CustomUserDetailsService userDetails;

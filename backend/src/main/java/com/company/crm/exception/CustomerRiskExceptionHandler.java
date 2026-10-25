@@ -1,12 +1,12 @@
 package com.company.crm.exception;
 
-import com.company.crm.controller.AiCustomerRiskController;
+import com.company.crm.controller.CustomerRiskController;
 import org.springframework.http.*;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.web.bind.annotation.*;
 
-@RestControllerAdvice(assignableTypes = AiCustomerRiskController.class)
+@RestControllerAdvice(assignableTypes = CustomerRiskController.class)
 public class CustomerRiskExceptionHandler {
     @ExceptionHandler(CustomerRiskException.class)
     public ResponseEntity<ProblemDetail> risk(CustomerRiskException exception) {

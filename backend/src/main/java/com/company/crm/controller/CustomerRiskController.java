@@ -12,7 +12,7 @@ import org.springframework.web.bind.annotation.*;
 @RestController
 @RequestMapping("/customer-risks/analyses")
 @RequiredArgsConstructor
-public class AiCustomerRiskController {
+public class CustomerRiskController {
     private final CustomerRiskAnalysisService analysis;
 
     @PostMapping

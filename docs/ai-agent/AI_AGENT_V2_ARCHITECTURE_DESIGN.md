@@ -32,7 +32,7 @@
 
 ## 3. 总体架构与调用链
 
-自然语言统一使用 `AiAnalysisController` 的 `POST /ai/analysis`，默认 context-path=/api 后对外为 `/api/ai/analysis`。不创建 AiRiskAnalysisController 或 /api/ai/risk-analysis。保留 S2-A 的 AiCustomerRiskController（/api/customer-risks/analyses），供结构化操作及后续分页/明确对象交互使用。
+自然语言统一使用 `AiAnalysisController` 的 `POST /ai/analysis`，默认 context-path=/api 后对外为 `/api/ai/analysis`。不创建 AiRiskAnalysisController 或 /api/ai/risk-analysis。保留 S2-A 的 CustomerRiskController（/api/customer-risks/analyses），供结构化操作及后续分页/明确对象交互使用。
 
 ```mermaid
 flowchart TD
@@ -47,7 +47,7 @@ flowchart TD
   GATE -->|开关开启| RISK[AiRiskAnalysisServiceImpl V2准入]
   RISK --> RT[唯一零参数风险Tool]
   RT --> CORE[CustomerRiskService 独立复核]
-  STRUCT[AiCustomerRiskController 三权限] --> SA[CustomerRiskAnalysisService]
+  STRUCT[CustomerRiskController 三权限] --> SA[CustomerRiskAnalysisService]
   SA --> CORE
   CORE --> RESULT[可信风险结果]
   RESULT --> ASSEMBLER[CustomerRiskResponseAssembler 确定性VO]
@@ -64,7 +64,7 @@ flowchart TD
 | service/AiStatisticsAnalysisService及impl | B1迁移V1范围策略、唯一统计Tool校验、执行和VO组装；不重复分类 |
 | service/AiRiskAnalysisService及impl | 已实现B2内部风险编排，B3仅在SUGGESTIONS附加建议，保留单次核心查询 |
 | service/RiskAdviceService及impl、CustomerRiskAdviceAccessVerifier | B3独立建议协议/预算；建议前后重新授权和当前页批量对象复核 |
-| controller/AiCustomerRiskController、service/CustomerRiskAnalysisService及impl | 保留S2-A结构化入口和应用协调，不经过模型路由 |
+| controller/CustomerRiskController、service/CustomerRiskAnalysisService及impl | 保留S2-A结构化入口和应用协调，不经过模型路由 |
 | service/CustomerRiskAccessPolicy、CustomerRiskService及impl、CustomerRiskEvaluator | 保留S1可信准入、短只读事务、确定性规则与排序/分页 |
 | ai/tool/CustomerStatisticsTool及Factory | 已有V1工具，Schema不变 |
 | ai/tool/CustomerRiskTool及Factory | B2已实现；风险开关开启且授权通过后按请求注册，最多一次执行 |
@@ -398,7 +398,7 @@ CustomerRiskAdviceAccessVerifier在建议前后各开一个REQUIRES_NEW只读短
 
 ### 11.3 ProblemDetail与部分成功
 
-CustomerRiskExceptionHandler仅绑定AiCustomerRiskController。共享聊天Advice显式处理CustomerRiskException并复用同一状态/code映射，不能落入V1通用500；不要把两个有通用兜底的Advice同时绑定共享Controller。保留V1所有既有异常契约。B4应使用当前实际映射：
+CustomerRiskExceptionHandler仅绑定CustomerRiskController。共享聊天Advice显式处理CustomerRiskException并复用同一状态/code映射，不能落入V1通用500；不要把两个有通用兜底的Advice同时绑定共享Controller。保留V1所有既有异常契约。B4应使用当前实际映射：
 
 | HTTP | code | 情况与结果 |
 |---|---|---|
