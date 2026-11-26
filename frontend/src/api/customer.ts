@@ -11,3 +11,10 @@ export const getCustomerList = (params: CustomerListQuery) =>
 
 export const createCustomer = (data: CreateCustomerRequest) =>
   request.post<CustomerCreateResult>('/customers', data)
+
+export const getCustomerDetail = (id: string) =>
+  request.get<import('@/types/customer').CustomerDetail>(`/customers/${encodeURIComponent(id)}`)
+export const getCustomerContacts = (id: string) =>
+  request.get<import('@/types/customer').CustomerContact[]>(`/customers/${encodeURIComponent(id)}/contacts`)
+export const getCustomerFollowRecords = (id: string, page: number, size = 10) =>
+  request.get<import('@/types/customer').CustomerFollowRecordPage>(`/customers/${encodeURIComponent(id)}/follow-records`, { params: { page, size } })

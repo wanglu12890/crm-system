@@ -2,6 +2,7 @@
 import { computed, onMounted, ref } from 'vue'
 import axios from 'axios'
 import { ElMessage } from 'element-plus'
+import CustomerDetailDrawer from '@/components/business/customer/CustomerDetailDrawer.vue'
 import CustomerSearch from '@/components/business/customer/CustomerSearch.vue'
 import CustomerTable from '@/components/business/customer/CustomerTable.vue'
 import CustomerFormDialog from '@/components/business/customer/CustomerFormDialog.vue'
@@ -35,6 +36,8 @@ const page = ref(1)
 const size = ref(DEFAULT_PAGE_SIZE)
 const total = ref(0)
 const createDialogVisible = ref(false)
+const detailVisible = ref(false)
+const selectedCustomerId = ref<string>('')
 const searchCriteria = ref<CustomerSearchCriteria>(emptyCriteria())
 
 const buildQuery = (): CustomerListQuery => ({
@@ -134,6 +137,7 @@ onMounted(() => {
       </div>
     </header>
 
+    <CustomerDetailDrawer v-model="detailVisible" :customer-id="selectedCustomerId" />
     <CustomerSearch
       :model-value="searchCriteria"
       :owners="ownerOptions"
