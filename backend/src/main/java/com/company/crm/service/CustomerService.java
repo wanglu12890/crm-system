@@ -7,6 +7,8 @@ import com.company.crm.vo.customer.CustomerCreateVO;
 import com.company.crm.vo.customer.CustomerListVO;
 
 public interface CustomerService {
+    com.company.crm.vo.customer.CustomerDetailVO getCustomerDetail(Long id);
+
 
     PageResultVO<CustomerListVO> listCustomers(CustomerListQuery query);
 

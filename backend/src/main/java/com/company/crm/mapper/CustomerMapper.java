@@ -15,6 +15,8 @@ import java.time.LocalDateTime;
 
 @Mapper
 public interface CustomerMapper extends BaseMapper<Customer> {
+    com.company.crm.vo.customer.CustomerDetailVO selectCustomerDetail(@Param("id") Long id, @Param("dataScope") DataScopeContext dataScope);
+
 
     IPage<CustomerListVO> selectCustomerPage(
             Page<CustomerListVO> page,

@@ -73,4 +73,12 @@
            AND c.created_at &lt; #{endTime}
         </if>
     </select>
+    <select id="selectCustomerDetail" resultType="com.company.crm.vo.customer.CustomerDetailVO">
+        SELECT CAST(c.id AS CHAR) AS id, c.customer_no, c.customer_name, c.customer_type,
+        c.customer_level, c.industry, c.source, c.phone, c.email, c.province, c.city, c.address,
+        CAST(c.owner_id AS CHAR) AS ownerId, owner.real_name AS ownerName,
+        c.status, c.remark, c.created_at, c.updated_at
+        FROM customer c LEFT JOIN sys_user owner ON owner.id = c.owner_id
+        WHERE <include refid="customerVisibilityConditions"/> AND c.id = #{id}
+    </select>
 </mapper>

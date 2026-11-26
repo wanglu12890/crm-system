@@ -8,6 +8,14 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 @RestControllerAdvice
 public class CustomerExceptionHandler {
+    @ExceptionHandler(CustomerNotFoundException.class)
+    public ResponseEntity<ProblemDetail> handleNotFound(CustomerNotFoundException exception) {
+        ProblemDetail detail = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, exception.getMessage());
+        detail.setTitle("??????");
+        detail.setProperty("code", "CUSTOMER_NOT_FOUND");
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(detail);
+    }
+
 
     @ExceptionHandler(DataScopeConfigurationException.class)
     public ResponseEntity<ProblemDetail> handleDataScopeConfiguration(

@@ -40,9 +40,24 @@ class CustomerControllerTest {
 
     @Autowired private MockMvc mockMvc;
     @MockBean private CustomerService customerService;
+    @MockBean private com.company.crm.service.ContactService contactService;
+    @MockBean private com.company.crm.service.FollowRecordService followRecordService;
     @MockBean private CustomUserDetailsService customUserDetailsService;
     @MockBean private PasswordEncoder passwordEncoder;
     @MockBean private JwtService jwtService;
+
+    @Test
+    void detailsRequirePermissionsAndBoundPagination() throws Exception {
+        for (String suffix : List.of("", "/contacts", "/follow-records")) {
+            mockMvc.perform(get("/customers/1" + suffix)).andExpect(status().isUnauthorized());
+            mockMvc.perform(get("/customers/1" + suffix).with(user("test"))).andExpect(status().isForbidden());
+        }
+        when(customerService.getCustomerDetail(1L)).thenThrow(new com.company.crm.exception.CustomerNotFoundException());
+        mockMvc.perform(get("/customers/1").with(user("test").authorities(new SimpleGrantedAuthority("customer:list"))))
+            .andExpect(status().isNotFound()).andExpect(jsonPath("$.code").value("CUSTOMER_NOT_FOUND"));
+        mockMvc.perform(get("/customers/1/follow-records?size=101").with(user("test").authorities(new SimpleGrantedAuthority("follow:list"))))
+            .andExpect(status().isBadRequest());
+    }
 
     @Test
     void shouldRejectAnonymousCustomerList() throws Exception {

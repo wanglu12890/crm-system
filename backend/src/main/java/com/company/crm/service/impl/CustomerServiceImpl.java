@@ -48,6 +48,15 @@ public class CustomerServiceImpl implements CustomerService {
 
     @Override
     @Transactional(readOnly = true)
+    public com.company.crm.vo.customer.CustomerDetailVO getCustomerDetail(Long id) {
+        DataScopeContext scope = dataScopeResolver.resolve(currentSecurityUser().getUserId(), CUSTOMER_LIST_PERMISSION);
+        var detail = customerMapper.selectCustomerDetail(id, scope);
+        if (detail == null) throw new com.company.crm.exception.CustomerNotFoundException();
+        return detail;
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public PageResultVO<CustomerListVO> listCustomers(CustomerListQuery query) {
         Long currentUserId = currentSecurityUser().getUserId();
         DataScopeContext dataScope = dataScopeResolver.resolve(currentUserId, CUSTOMER_LIST_PERMISSION);
