@@ -95,6 +95,18 @@ class CustomerServiceImplTest {
         verify(customerMapper).selectCustomerPage(any(), eq(query), eq(scope));
     }
 
+    @Test
+    void detailUsesCurrentScopeAndConcealsInvisibleObjects() {
+        authenticate(7L);
+        for (DataScopeType type : List.of(DataScopeType.ALL, DataScopeType.DEPT, DataScopeType.SELF)) {
+            var scope = new DataScopeContext(type, 7L, type == DataScopeType.DEPT ? 20L : null);
+            when(dataScopeResolver.resolve(7L, "customer:list")).thenReturn(scope);
+            org.assertj.core.api.Assertions.assertThatThrownBy(() -> customerService.getCustomerDetail(99L))
+                .isInstanceOf(com.company.crm.exception.CustomerNotFoundException.class);
+            verify(customerMapper).selectCustomerDetail(99L, scope);
+        }
+    }
+
     private void authenticate(long userId) {
         SecurityUser principal = new SecurityUser(
                 userId, "user", "password", "User", 1, 0,

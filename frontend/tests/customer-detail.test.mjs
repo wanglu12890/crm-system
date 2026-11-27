@@ -48,3 +48,16 @@ test('pagination rejects stale page and child failure stays independent', async 
   assert.equal(state.page.value, 2); assert.equal(state.records.value[0].id, 'page2')
   assert.equal(state.contactsError.value, 'error')
 })
+
+test('list view handler opens detail for selected string ID', () => {
+  const view = fs.readFileSync(new URL('../src/views/business/Customer.vue', import.meta.url), 'utf8')
+  const handler = view.match(/const handleView = [\s\S]*?(?=\nconst handleEdit)/)?.[0]
+  assert.ok(handler, 'list view handler must exist')
+  const context = { selectedCustomerId: ref(''), detailVisible: ref(false) }
+  const script = handler + '\n;handleView({ id: "9223372036854775806" });'
+  vm.runInNewContext(ts.transpileModule(script, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText, context)
+  assert.equal(context.selectedCustomerId.value, '9223372036854775806')
+  assert.equal(context.detailVisible.value, true)
+  assert.match(view, /@view="handleView"/)
+  assert.match(view, /<CustomerDetailDrawer[^>]*v-model="detailVisible"[^>]*:customer-id="selectedCustomerId"/)
+})

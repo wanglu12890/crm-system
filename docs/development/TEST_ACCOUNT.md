@@ -17,6 +17,22 @@
 | sales_manager01 | SALES_MANAGER | 待填写 | DEPT | 部门客户统计与数据隔离 |
 | sales_staff03 | SALES_STAFF | 待填写 | SELF | 本人客户统计与越权验证 |
 
+数据库连接：MySQL80用户为 root，密码存在系统环境变量中，DB_PASSWORD，数据库 crm_system
+
+测试账号也存在系统环境变量中
+超级管理员
+CRM_SUP_ADMIN
+CRM_SUP_ADMIN_SCREAT
+系统管理员
+CRM_SYS_ADMIN
+CRM_SYS_ADMIN_SCREAT
+销售经理
+CRM_SALES_MANAGER
+CRM_SALES_MANAGER_SCREAT
+销售员工
+CRM_SALES_STAFF
+CRM_SALES_STAFF_SCREAT
+
 ## 三、AI 智能分析权限
 
 正式接口：

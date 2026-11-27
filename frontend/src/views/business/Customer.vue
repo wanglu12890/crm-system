@@ -119,7 +119,10 @@ const showPendingFeature = (feature: string) => {
   ElMessage.info(`${feature}功能待实现`)
 }
 
-const handleView = (_customer: CustomerListItem) => showPendingFeature('客户详情')
+const handleView = (customer: CustomerListItem) => {
+  selectedCustomerId.value = customer.id
+  detailVisible.value = true
+}
 const handleEdit = (_customer: CustomerListItem) => showPendingFeature('编辑客户')
 
 onMounted(() => {
