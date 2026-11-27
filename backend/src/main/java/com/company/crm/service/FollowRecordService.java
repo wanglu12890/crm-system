@@ -1,2 +1,9 @@
 package com.company.crm.service;
-public interface FollowRecordService { com.company.crm.vo.PageResultVO<com.company.crm.vo.customer.FollowRecordVO> listForCustomer(Long id, com.company.crm.dto.customer.FollowRecordQuery query); }
+
+import com.company.crm.vo.PageResultVO;
+import com.company.crm.vo.customer.FollowRecordVO;
+
+import com.company.crm.dto.customer.FollowRecordQuery;public interface FollowRecordService {
+
+    PageResultVO<FollowRecordVO> listForCustomer(Long id, FollowRecordQuery query);
+}

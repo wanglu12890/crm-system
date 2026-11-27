@@ -9,4 +9,4 @@ export const detailError = (error: unknown): string => {
   return '加载失败，请稍后重试'
 }
 // 与客户列表保持一致
-export const detailDate = (value: string | null) => value ? value.replace('T', ' ').slice(0, 19) : '-'
+export const detailDate = (value: string | null | undefined) => value ? value.replace('T', ' ').slice(0, 19) : '-'

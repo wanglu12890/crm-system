@@ -124,7 +124,7 @@ V1 正式采用 `ALL`、`DEPT` 和 `SELF`。`DEPT_AND_CHILD`、`CUSTOM` 不进�
 - `DEPT`：仅允许访问 owner 用户与当前用户 `dept_id` 相同的已分配客户。
 - `ALL`：普通已分配客户查询不按 owner 限制。
 - 公海不归入 `SELF`、`DEPT` 或普通 `ALL` 查询语义，由独立公海权限和 `owner_id IS NULL` 决定。
-- **Planned Implementation**：该矩阵尚未接入 Customer Service，不能把 `sys_role.data_scope` 字段存在误述为已实现数据权限。
+- **当前实现**：客户列表、详情及子资源读取已接入数据范围；实际范围取授予 customer:list 的有效角色最大范围，而非仅凭角色名称判断。表中的客户编辑、公海、联系人及跟进写操作仍为规划。
 
 ## 7. Customer Creation
 
@@ -141,7 +141,7 @@ V1 正式采用 `ALL`、`DEPT` 和 `SELF`。`DEPT_AND_CHILD`、`CUSTOM` 不进�
 
 ## 8. Functional Permission Baseline
 
-以下权限码是 **Planned Implementation**，当前尚未写入 `sys_permission`，也没有对应接口或 `@PreAuthorize`：
+以下权限码已纳入 database/init.sql 及 customer_v1_permission_init.sql；已有数据库是否执行脚本需单独核验。客户列表、新建、详情及子资源读取已有对应授权，其余权限存在不代表业务接口已实现：
 
 | Domain | Planned permission codes |
 |---|---|
@@ -310,9 +310,21 @@ WHERE id = ?
 
 ## 20. Implementation Notes
 
-- 当前已有 Customer/Contact/FollowRecord 开发 fixture，但尚未实现该领域的 Entity、Mapper、Service、Controller、前端页面和 DEPT 查询过滤。
+- 当前已有 Customer/Contact/FollowRecord 的 Entity、Mapper、Service 和只读详情接口，以及客户列表、新建和详情抽屉；DEPT 查询通过负责人所属部门过滤。
 - 业务 Long/BIGINT ID 对前端应继续按 string 输出。
 - Customer、Contact、FollowRecord 的 Entity 应按现有全局约定映射逻辑删除和乐观锁。
 - owner、数据范围、父对象访问和多态目标校验必须由后端完成。
 - 正式开发前应先生成对应测试用例；实现写操作时确保授权失败无副作用。
 - 对现有开发数据库的结构升级必须由用户手动执行一次性 ALTER SQL；修改 `init.sql` 本身不会升级已有实例。
+
+## 21. 客户详情 V1 实现与验收（2026-11-27）
+
+- 已实现客户基础详情、联系人列表、跟进记录分页三个只读接口，具体响应见 [API 规范](../api-spec.md#客户详情-v1已实现)。
+- 后端入口为 CustomerController；CustomerServiceImpl.getCustomerDetail 使用 DataScopeResolver 与 CustomerMapper.xml 的 customerVisibilityConditions。ContactServiceImpl、FollowRecordServiceImpl 先调用该详情方法验证父客户可见性，再查询子资源。
+- 普通客户查询同时排除 deleted=1、owner_id IS NULL；SELF 按当前 owner，DEPT 按 owner 用户部门，ALL 仍排除公海。子资源不能凭创建人或历史跟进人绕过父客户范围。
+- 前端 Customer.vue 的 handleView 设置字符串客户 ID 并打开 CustomerDetailDrawer，子组件负责联系人表格和跟进时间线；关闭或切换客户清空临时状态，版本校验防止旧响应覆盖新客户或分页。
+- 真实账号抽样确认 SUPER_ADMIN、SYSTEM_ADMIN 为 ALL，SALES_MANAGER 为 DEPT，SALES_STAFF 为 SELF；三个接口的跨范围拒绝、公海及不存在客户 404、正常数据对账与分页通过。用户已确认浏览器验收通过，不等同于自动化浏览器测试全场景覆盖。
+- 后端定向测试报告 65 项通过，前端详情入口修复后 4 项相关测试通过，类型检查及构建通过。列表入口曾保留待实现提示，已修复并增加回归测试。
+- 只读核验快照：客户 327/327 有效，联系人 477/476 有效，跟进 1236/1236 有效；未发现孤儿关联。快照不是固定数据基线，不应据此重新导入数据。
+- 覆盖限制：真实库无超过 10 条跟进客户、无混合目标类型及已删除客户样本；权限撤销、负责人/部门变化与缺少单项权限账号的真实场景尚未全面覆盖。SQL 结构和 Mock 测试不能替代这些真实场景。
+- 客户修改、公海查询/领取、联系人及跟进写操作未实现；Redis 未接入。本次完成不扩大上述业务范围。

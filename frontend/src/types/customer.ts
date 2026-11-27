@@ -137,39 +137,43 @@ export const CUSTOMER_STATUS_LABELS: Record<CustomerStatus, string> = {
   INACTIVE: '非活跃客户'
 }
 
-export interface CustomerDetail extends CustomerListItem {
-  source: string | null
-  phone: string | null
-  email: string | null
-  province: string | null
-  city: string | null
-  address: string | null
-  remark: string | null
+export interface CustomerDetail extends Omit<CustomerListItem, 'customerLevel' | 'industry' | 'ownerId' | 'ownerName'> {
+  customerLevel?: CustomerLevel | null
+  industry?: string | null
+  ownerId?: string | null
+  ownerName?: string | null
+  source?: string | null
+  phone?: string | null
+  email?: string | null
+  province?: string | null
+  city?: string | null
+  address?: string | null
+  remark?: string | null
   createdAt: string
 }
 export interface CustomerContact {
   id: string
   customerId: string
   contactName: string
-  gender: number | null
-  position: string | null
-  mobile: string | null
-  telephone: string | null
-  email: string | null
+  gender?: number | null
+  position?: string | null
+  mobile?: string | null
+  telephone?: string | null
+  email?: string | null
   isPrimary: number
-  decisionRole: string | null
-  birthday: string | null
-  remark: string | null
+  decisionRole?: string | null
+  birthday?: string | null
+  remark?: string | null
 }
 export interface CustomerFollowRecord {
   id: string
-  contactId: string | null
+  contactId?: string | null
   followType: string
   content: string
   followAt: string
-  nextFollowAt: string | null
+  nextFollowAt?: string | null
   ownerId: string
-  ownerName: string | null
+  ownerName?: string | null
 }
 export interface CustomerFollowRecordPage extends Omit<CustomerListPageResult, 'records'> {
   records: CustomerFollowRecord[]

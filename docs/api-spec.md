@@ -83,3 +83,21 @@
 - 错误：ProblemDetail包含`type`、`title`、`status`、`detail`、`instance`及稳定`code`。不合法范围返回422 `AI_ANALYSIS_UNSUPPORTED`，不返回metrics；双权限缺失403，未认证401，AI未启用503。完整错误码及成功示例见上述需求基线。
 
 前端正式路由为`/admin/analytics/ai`，请求/响应类型位于`frontend/src/types/aiAnalysis.ts`。其时间边界目前声明为必填可空，与ALL实际省略字段存在类型差异，已记录为后续源码维护项，不在本文档任务中修改。
+
+## 客户详情 V1（已实现）
+
+本节为实际契约，优先于前文整体接口规划。直接返回 VO，不使用 code/message/data 包装。
+
+| 方法与路径 | 功能权限 | 响应 |
+|---|---|---|
+| GET /api/customers/{id} | customer:list | CustomerDetailVO |
+| GET /api/customers/{id}/contacts | contact:list | ContactVO 数组 |
+| GET /api/customers/{id}/follow-records | follow:list | PageResultVO<FollowRecordVO> |
+
+- ID 为字符串。基础详情包含编号、名称、类型、等级、行业、来源、联系方式、地址、ownerId/ownerName、状态、备注及创建/更新时间。
+- ContactVO 包含 id、customerId、contactName、gender、position、mobile、telephone、email、isPrimary、decisionRole、birthday、remark；按 is_primary DESC、id ASC，排除删除记录，无数据返回 []。
+- FollowRecordVO 包含 id、contactId、followType、content、followAt、nextFollowAt、ownerId、ownerName；只查询 target_type=CUSTOMER 且 target_id 为客户 ID 的有效记录，按 follow_at DESC、id DESC。
+- 跟进参数为 page、size，默认 1、10，page 至少 1，size 为 1—100。直接返回 records、total、page、size、pages；无记录或超出页码返回空 records，total 保留实际计数。
+- 子资源先按 customer:list 的数据范围校验父客户；普通接口排除公海和删除客户。未认证 401，缺少接口权限或范围配置无效 403，不存在/已删除/对象不可见统一 404，非法分页 400。
+- 错误遵循 ProblemDetail，详情不可见错误码为 CUSTOMER_NOT_FOUND，数据范围配置错误为 DATA_SCOPE_CONFIGURATION_ERROR。
+- 可选字段允许为空；当前全局 JSON 配置可能省略 null 字段，调用端须兼容。联系人独立管理、跟进写入及客户编辑/删除不属于本次已实现契约。

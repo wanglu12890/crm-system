@@ -1,2 +1,8 @@
 package com.company.crm.service;
-public interface ContactService { java.util.List<com.company.crm.vo.customer.ContactVO> listForCustomer(Long id); }
+
+import java.util.List;
+
+import com.company.crm.vo.customer.ContactVO;public interface ContactService {
+
+    List<ContactVO> listForCustomer(Long id);
+}

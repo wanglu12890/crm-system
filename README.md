@@ -4,7 +4,7 @@
 
 ## 技术栈
 
-- 后端：Java 17、Spring Boot 3.3.5、Maven、Spring Security、JWT（JJWT 0.12.6）、MyBatis-Plus 3.5.7、MySQL 8、Lombok
+- 后端：Java 17、Spring Boot 3.5.16、Maven、Spring Security、JWT（JJWT 0.12.6）、MyBatis-Plus 3.5.7、MySQL 8、Lombok
 - 前端：Vue 3、Vite 5、TypeScript、Vue Router、Pinia、Axios、Element Plus
 - 工程方式：RESTful API、环境变量配置、RBAC 权限模型、统一响应与异常协议、逻辑删除和审计字段
 
@@ -59,6 +59,10 @@ crm-system/
 
 用户认证、客户、联系人、线索、商机、跟进记录、合同、数据统计和系统管理。权限模型采用 `用户 -> 角色 -> 权限` 的 RBAC 关系；功能权限由 Spring Security 执行，客户等业务数据还需按负责人、部门或自定义范围过滤。
 
+## 客户详情 V1 当前能力
+
+客户列表已接入详情抽屉，展示基础资料、联系人及跟进分页；三个只读接口复用现有数据范围，子资源先验证父客户可见性。2026-11-27 已完成真实账号接口抽样与数据对账，用户确认浏览器验收通过。客户编辑、联系人及跟进写操作、公海功能和 Redis 尚未实现。实际契约与验收限制见 [客户业务规则](docs/customer-management/CUSTOMER_V1_RULES.md#21-客户详情-v1-实现与验收2026-11-27) 和 [API 规范](docs/api-spec.md#客户详情-v1已实现)。
+
 ## 数据库设计
 
 `database/init.sql` 初始化脚本包含：
@@ -70,18 +74,18 @@ crm-system/
 
 ## Maven 配置
 
-`backend/pom.xml` 以 `spring-boot-starter-parent:3.3.5` 管理依赖，编译目标为 Java 17。核心依赖包括 Web、Validation、Security、MyBatis-Plus Spring Boot 3 Starter、MySQL Connector/J、JJWT API/实现/Jackson、Lombok，以及后端测试组件。
+`backend/pom.xml` 以 `spring-boot-starter-parent:3.5.16` 管理依赖，编译目标为 Java 17。核心依赖包括 Web、Validation、Security、MyBatis-Plus Spring Boot 3 Starter、MySQL Connector/J、JJWT API/实现/Jackson、Lombok，以及后端测试组件。
 
 MyBatis-Plus 已配置驼峰映射、雪花主键、全局逻辑删除和 Mapper XML 路径。开发环境开启 SQL 控制台日志，生产配置关闭；正式项目建议接入结构化 SQL 慢查询监控，禁止生产输出完整 SQL 参数。
 
-Spring Security 与 JWT 当前仅完成依赖和配置项预留。业务阶段需要实现 `SecurityFilterChain`、JWT 过滤器、认证失败/无权限处理器、`UserDetailsService`、密码编码器以及刷新令牌撤销策略；不得使用默认生成密码投入运行。
+Spring Security 与 JWT 已实现登录、请求认证、401/403 处理及方法级授权；客户查询复用 ALL、DEPT、SELF 数据范围。Refresh Token 与令牌撤销尚未实现。
 
 ## Vue 配置
 
 - Vite：`@` 映射到 `src`，开发服务器为 5173，`/api` 代理到后端 8080。
-- 路由：静态路由只保留登录/错误页；登录后根据后端权限生成动态业务路由，页面组件必须懒加载。
+- 路由：当前采用静态业务路由与认证、权限守卫，页面组件懒加载。客户详情使用列表内抽屉，不新增路由。
 - Pinia：按 `auth`、`permission`、`dictionary` 等领域拆 Store；表格筛选和弹窗等页面局部状态不放入全局 Store。
-- Axios：`src/utils/request.ts` 统一 baseURL、超时和 JSON 协议，后续在拦截器加入 Token、单次刷新并发控制、错误提示和 traceId 上报。
+- Axios：`src/utils/request.ts` 统一 baseURL、超时、Bearer Token 与 401 登录失效跳转；尚未实现令牌刷新。
 - API：每个模块在 `src/api` 中定义方法，并在 `src/types` 定义请求与响应类型，页面禁止直接调用 Axios。
 
 ## 环境要求

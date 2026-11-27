@@ -6,6 +6,7 @@ import com.company.crm.dto.customer.CreateCustomerDTO;
 import com.company.crm.dto.customer.CustomerListQuery;
 import com.company.crm.entity.Customer;
 import com.company.crm.exception.CustomerCreationException;
+import com.company.crm.exception.CustomerNotFoundException;
 import com.company.crm.exception.DuplicateCustomerNumberException;
 import com.company.crm.exception.ForbiddenCustomerCreationException;
 import com.company.crm.mapper.CustomerMapper;
@@ -16,7 +17,11 @@ import com.company.crm.service.CustomerService;
 import com.company.crm.utils.CustomerNumberGenerator;
 import com.company.crm.vo.PageResultVO;
 import com.company.crm.vo.customer.CustomerCreateVO;
+import com.company.crm.vo.customer.CustomerDetailVO;
 import com.company.crm.vo.customer.CustomerListVO;
+import java.time.LocalDateTime;
+import java.util.HashSet;
+import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataAccessException;
@@ -26,10 +31,6 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
-import java.time.LocalDateTime;
-import java.util.HashSet;
-import java.util.Set;
 
 @Service
 @RequiredArgsConstructor
@@ -48,10 +49,10 @@ public class CustomerServiceImpl implements CustomerService {
 
     @Override
     @Transactional(readOnly = true)
-    public com.company.crm.vo.customer.CustomerDetailVO getCustomerDetail(Long id) {
+    public CustomerDetailVO getCustomerDetail(Long id) {
         DataScopeContext scope = dataScopeResolver.resolve(currentSecurityUser().getUserId(), CUSTOMER_LIST_PERMISSION);
         var detail = customerMapper.selectCustomerDetail(id, scope);
-        if (detail == null) throw new com.company.crm.exception.CustomerNotFoundException();
+        if (detail == null) throw new CustomerNotFoundException();
         return detail;
     }
 
