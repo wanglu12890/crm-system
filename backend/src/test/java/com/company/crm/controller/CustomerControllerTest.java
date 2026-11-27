@@ -47,6 +47,33 @@ class CustomerControllerTest {
     @MockBean private JwtService jwtService;
 
     @Test
+    void updateRequiresAuthorityValidatesAndIgnoresProtectedFields() throws Exception {
+        var put = org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put("/customers/9");
+        mockMvc.perform(put).andExpect(status().isUnauthorized());
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put("/customers/9")
+            .with(user("viewer").authorities(new SimpleGrantedAuthority("customer:list")))
+            .contentType("application/json").content("{\"customerName\":\"N\",\"customerType\":\"ENTERPRISE\",\"status\":\"ACTIVE\",\"version\":0}"))
+            .andExpect(status().isForbidden());
+        String body = "{\"customerName\":\"Updated\",\"customerType\":\"ENTERPRISE\",\"status\":\"ACTIVE\",\"version\":0,\"ownerId\":\"999\",\"customerNo\":\"changed\"}";
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put("/customers/9")
+            .with(user("editor").authorities(new SimpleGrantedAuthority("customer:update")))
+            .contentType("application/json").content(body)).andExpect(status().isNoContent());
+        var captor = org.mockito.ArgumentCaptor.forClass(com.company.crm.dto.customer.UpdateCustomerDTO.class);
+        verify(customerService).updateCustomer(org.mockito.ArgumentMatchers.eq(9L), captor.capture());
+        org.assertj.core.api.Assertions.assertThat(captor.getValue().getCustomerName()).isEqualTo("Updated");
+        for (String invalid : List.of(body.replace("ENTERPRISE", "INVALID"), body.replace("Updated", ""), body.replace("\"version\":0", "\"version\":-1"))) {
+            mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put("/customers/9")
+                .with(user("editor").authorities(new SimpleGrantedAuthority("customer:update")))
+                .contentType("application/json").content(invalid)).andExpect(status().isBadRequest());
+        }
+        org.mockito.Mockito.doThrow(new com.company.crm.exception.CustomerUpdateConflictException()).when(customerService).updateCustomer(org.mockito.ArgumentMatchers.eq(9L), any());
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put("/customers/9")
+            .with(user("editor").authorities(new SimpleGrantedAuthority("customer:update")))
+            .contentType("application/json").content(body)).andExpect(status().isConflict())
+            .andExpect(jsonPath("$.code").value("CUSTOMER_UPDATE_CONFLICT"));
+    }
+
+    @Test
     void detailsRequirePermissionsAndBoundPagination() throws Exception {
         for (String suffix : List.of("", "/contacts", "/follow-records")) {
             mockMvc.perform(get("/customers/1" + suffix)).andExpect(status().isUnauthorized());

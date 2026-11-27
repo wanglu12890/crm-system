@@ -1,5 +1,8 @@
 package com.company.crm.service.impl;
 
+import com.company.crm.dto.customer.UpdateCustomerDTO;
+import com.company.crm.exception.CustomerUpdateConflictException;
+
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.company.crm.dto.customer.CreateCustomerDTO;
@@ -119,6 +122,41 @@ public class CustomerServiceImpl implements CustomerService {
         log.info("Create customer success, operatorUserId={}, customerId={}, customerNo={}, ownership={}",
                 operatorId, customerId, customerNo, ownerId == null ? "PUBLIC_POOL" : "PRIVATE");
         return new CustomerCreateVO(String.valueOf(customerId), customerNo);
+    }
+
+    @Override
+    @Transactional
+    public void updateCustomer(Long id, UpdateCustomerDTO dto) {
+        Long operatorId = currentSecurityUser().getUserId();
+        DataScopeContext visibleScope = dataScopeResolver.resolve(operatorId, CUSTOMER_LIST_PERMISSION);
+        DataScopeContext updateScope = dataScopeResolver.resolve(operatorId, "customer:update");
+        var current = customerMapper.selectCustomerDetail(id, visibleScope);
+        if (current == null || customerMapper.selectCustomerDetail(id, updateScope) == null) {
+            throw new CustomerNotFoundException();
+        }
+        dto.setCustomerName(dto.getCustomerName().trim());
+        dto.setCustomerLevel(nullableTrimmed(dto.getCustomerLevel()));
+        dto.setIndustry(nullableTrimmed(dto.getIndustry()));
+        dto.setSource(nullableTrimmed(dto.getSource()));
+        dto.setPhone(nullableTrimmed(dto.getPhone()));
+        dto.setEmail(nullableTrimmed(dto.getEmail()));
+        dto.setProvince(nullableTrimmed(dto.getProvince()));
+        dto.setCity(nullableTrimmed(dto.getCity()));
+        dto.setAddress(nullableTrimmed(dto.getAddress()));
+        dto.setRemark(nullableTrimmed(dto.getRemark()));
+        // Both view and update grants must remain within the same effective scope.
+        DataScopeContext writeScope = updateScope;
+        if ("SELF".equals(visibleScope.getScopeCode()) ||
+                ("DEPT".equals(visibleScope.getScopeCode()) && "ALL".equals(updateScope.getScopeCode()))) {
+            writeScope = visibleScope;
+        }
+        int count = customerMapper.updateCustomerDetails(id, dto, operatorId,
+                Long.valueOf(current.ownerId()), LocalDateTime.now(), writeScope);
+        if (count != 1) {
+            if (customerMapper.selectCustomerDetail(id, updateScope) == null) throw new CustomerNotFoundException();
+            throw new CustomerUpdateConflictException();
+        }
+        log.info("Customer updated, customerId={}, operatorUserId={}", id, operatorId);
     }
 
     private Long resolveCreatedCustomerOwner(SecurityUser operator) {

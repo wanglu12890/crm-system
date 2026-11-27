@@ -8,6 +8,14 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 @RestControllerAdvice
 public class CustomerExceptionHandler {
+    @ExceptionHandler(CustomerUpdateConflictException.class)
+    public ResponseEntity<ProblemDetail> handleUpdateConflict(CustomerUpdateConflictException exception) {
+        ProblemDetail detail = ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, exception.getMessage());
+        detail.setTitle("客户更新冲突");
+        detail.setProperty("code", "CUSTOMER_UPDATE_CONFLICT");
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(detail);
+    }
+
     @ExceptionHandler(CustomerNotFoundException.class)
     public ResponseEntity<ProblemDetail> handleNotFound(CustomerNotFoundException exception) {
         ProblemDetail detail = ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, exception.getMessage());

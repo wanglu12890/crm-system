@@ -1,5 +1,8 @@
 package com.company.crm.controller;
 
+import com.company.crm.dto.customer.UpdateCustomerDTO;
+import org.springframework.web.bind.annotation.PutMapping;
+
 import com.company.crm.dto.customer.CreateCustomerDTO;
 import com.company.crm.dto.customer.CustomerListQuery;
 import com.company.crm.dto.customer.FollowRecordQuery;
@@ -34,6 +37,14 @@ public class CustomerController {
     private final CustomerService customerService;
     private final ContactService contactService;
     private final FollowRecordService followRecordService;
+
+    @PutMapping("/{id}")
+    @PreAuthorize("hasAuthority('customer:update')")
+    public ResponseEntity<Void> updateCustomer(@PathVariable Long id,
+            @Valid @RequestBody UpdateCustomerDTO dto) {
+        customerService.updateCustomer(id, dto);
+        return ResponseEntity.noContent().build();
+    }
 
     @GetMapping("/{id}")
     @PreAuthorize("hasAuthority('customer:list')")

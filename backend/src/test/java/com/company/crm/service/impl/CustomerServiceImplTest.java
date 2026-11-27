@@ -107,6 +107,26 @@ class CustomerServiceImplTest {
         }
     }
 
+    @Test
+    void updateIsScopedVersionedAndRejectsRaces() {
+        authenticate(7L);
+        var scope = new DataScopeContext(DataScopeType.SELF, 7L, null);
+        when(dataScopeResolver.resolve(7L, "customer:list")).thenReturn(scope);
+        when(dataScopeResolver.resolve(7L, "customer:update")).thenReturn(scope);
+        var dto = new com.company.crm.dto.customer.UpdateCustomerDTO();
+        dto.setCustomerName(" Updated "); dto.setVersion(0);
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> customerService.updateCustomer(9L, dto))
+            .isInstanceOf(com.company.crm.exception.CustomerNotFoundException.class);
+        org.mockito.Mockito.verify(customerMapper, org.mockito.Mockito.never()).updateCustomerDetails(any(), any(), any(), any(), any(), any());
+        var detail = new com.company.crm.vo.customer.CustomerDetailVO("9", "N", "Old", "ENTERPRISE", null, null, null, null, null, null, null, null, "7", "Owner", "ACTIVE", null, null, null, 0);
+        when(customerMapper.selectCustomerDetail(9L, scope)).thenReturn(detail);
+        when(customerMapper.updateCustomerDetails(org.mockito.ArgumentMatchers.eq(9L), org.mockito.ArgumentMatchers.eq(dto), org.mockito.ArgumentMatchers.eq(7L), org.mockito.ArgumentMatchers.eq(7L), any(), org.mockito.ArgumentMatchers.eq(scope))).thenReturn(1, 0);
+        customerService.updateCustomer(9L, dto);
+        assertThat(dto.getCustomerName()).isEqualTo("Updated");
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> customerService.updateCustomer(9L, dto))
+            .isInstanceOf(com.company.crm.exception.CustomerUpdateConflictException.class);
+    }
+
     private void authenticate(long userId) {
         SecurityUser principal = new SecurityUser(
                 userId, "user", "password", "User", 1, 0,

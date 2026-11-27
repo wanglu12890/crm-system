@@ -2,7 +2,9 @@ package com.company.crm.vo.customer;
 
 
 
-import java.time.LocalDateTime;public record CustomerDetailVO(
+import java.time.LocalDateTime;
+
+public record CustomerDetailVO(
         String id,
         String customerNo,
         String customerName,
@@ -20,6 +22,7 @@ import java.time.LocalDateTime;public record CustomerDetailVO(
         String status,
         String remark,
         LocalDateTime createdAt,
-        LocalDateTime updatedAt
+        LocalDateTime updatedAt,
+        Integer version
 ) {
 }

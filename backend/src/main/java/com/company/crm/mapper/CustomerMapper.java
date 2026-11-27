@@ -1,5 +1,7 @@
 package com.company.crm.mapper;
 
+import com.company.crm.dto.customer.UpdateCustomerDTO;
+
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
@@ -15,6 +17,12 @@ import org.apache.ibatis.annotations.Param;
 
 @Mapper
 public interface CustomerMapper extends BaseMapper<Customer> {
+    int updateCustomerDetails(@Param("id") Long id,
+            @Param("dto") UpdateCustomerDTO dto,
+            @Param("operatorId") Long operatorId, @Param("ownerId") Long ownerId,
+            @Param("updatedAt") java.time.LocalDateTime updatedAt,
+            @Param("dataScope") DataScopeContext dataScope);
+
     CustomerDetailVO selectCustomerDetail(@Param("id") Long id, @Param("dataScope") DataScopeContext dataScope);
 
 

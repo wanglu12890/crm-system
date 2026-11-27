@@ -77,8 +77,20 @@
         SELECT CAST(c.id AS CHAR) AS id, c.customer_no, c.customer_name, c.customer_type,
         c.customer_level, c.industry, c.source, c.phone, c.email, c.province, c.city, c.address,
         CAST(c.owner_id AS CHAR) AS ownerId, owner.real_name AS ownerName,
-        c.status, c.remark, c.created_at, c.updated_at
+        c.status, c.remark, c.created_at, c.updated_at, c.version
         FROM customer c LEFT JOIN sys_user owner ON owner.id = c.owner_id
         WHERE <include refid="customerVisibilityConditions"/> AND c.id = #{id}
     </select>
+    <update id="updateCustomerDetails">
+        UPDATE customer c
+        LEFT JOIN sys_user owner ON owner.id = c.owner_id
+        SET c.customer_name = #{dto.customerName}, c.customer_type = #{dto.customerType},
+            c.customer_level = #{dto.customerLevel}, c.industry = #{dto.industry},
+            c.source = #{dto.source}, c.phone = #{dto.phone}, c.email = #{dto.email},
+            c.province = #{dto.province}, c.city = #{dto.city}, c.address = #{dto.address},
+            c.status = #{dto.status}, c.remark = #{dto.remark},
+            c.updated_by = #{operatorId}, c.updated_at = #{updatedAt}, c.version = c.version + 1
+        WHERE <include refid="customerVisibilityConditions"/>
+          AND c.id = #{id} AND c.version = #{dto.version} AND c.owner_id = #{ownerId}
+    </update>
 </mapper>
