@@ -37,6 +37,8 @@ const size = ref(DEFAULT_PAGE_SIZE)
 const total = ref(0)
 const createDialogVisible = ref(false)
 const detailVisible = ref(false)
+const editCustomerId = ref<string>()
+const detailRefreshKey = ref(0)
 const selectedCustomerId = ref<string>('')
 const searchCriteria = ref<CustomerSearchCriteria>(emptyCriteria())
 
@@ -53,20 +55,24 @@ const buildQuery = (): CustomerListQuery => ({
 const getErrorDetail = (error: unknown): string | undefined =>
   axios.isAxiosError<ApiProblemDetail>(error) ? error.response?.data?.detail : undefined
 
+let listRequestVersion = 0
 const loadCustomers = async () => {
+  const requestVersion = ++listRequestVersion
   loading.value = true
   try {
     const response = await getCustomerList(buildQuery())
+    if (requestVersion !== listRequestVersion) return
     customers.value = response.data.records
     total.value = response.data.total
     page.value = response.data.page
     size.value = response.data.size
   } catch (error: unknown) {
+    if (requestVersion !== listRequestVersion) return
     customers.value = []
     total.value = 0
     ElMessage.error(getErrorDetail(error) || '客户列表加载失败，请稍后重试')
   } finally {
-    loading.value = false
+    if (requestVersion === listRequestVersion) loading.value = false
   }
 }
 
@@ -108,22 +114,23 @@ const handleCurrentChange = async (value: number) => {
 }
 
 const handleCreate = () => {
+  editCustomerId.value = undefined
   createDialogVisible.value = true
 }
 
 const handleCreateSuccess = async () => {
+  detailRefreshKey.value++
   await loadCustomers()
-}
-
-const showPendingFeature = (feature: string) => {
-  ElMessage.info(`${feature}功能待实现`)
 }
 
 const handleView = (customer: CustomerListItem) => {
   selectedCustomerId.value = customer.id
   detailVisible.value = true
 }
-const handleEdit = (_customer: CustomerListItem) => showPendingFeature('编辑客户')
+const handleEdit = (customer: CustomerListItem) => {
+  editCustomerId.value = customer.id
+  createDialogVisible.value = true
+}
 
 onMounted(() => {
   void loadCustomers()
@@ -140,7 +147,7 @@ onMounted(() => {
       </div>
     </header>
 
-    <CustomerDetailDrawer v-model="detailVisible" :customer-id="selectedCustomerId" />
+    <CustomerDetailDrawer :refresh-key="detailRefreshKey" v-model="detailVisible" :customer-id="selectedCustomerId" />
     <CustomerSearch
       :model-value="searchCriteria"
       :owners="ownerOptions"
@@ -177,6 +184,7 @@ onMounted(() => {
 
     <CustomerFormDialog
       v-model="createDialogVisible"
+      :customer-id="editCustomerId"
       @success="handleCreateSuccess"
     />
   </section>

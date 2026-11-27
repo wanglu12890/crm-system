@@ -7,7 +7,7 @@ import { useAuthStore } from '@/stores/auth'
 import { detailError, detailDate } from '@/utils/customerDetail'
 import CustomerContactList from './CustomerContactList.vue'
 import CustomerFollowRecordList from './CustomerFollowRecordList.vue'
-const props = defineProps<{ modelValue: boolean; customerId: string }>()
+const props = defineProps<{ modelValue: boolean; customerId: string; refreshKey?: number }>()
 const emit = defineEmits<{ 'update:modelValue': [value: boolean] }>()
 const auth = useAuthStore()
 const canDetail = computed(() => auth.hasPermission('customer:list'))
@@ -51,7 +51,7 @@ async function loadFollow(nextPage = page.value) {
   } catch (e) { if (active(version) && request === followRequest) followError.value = detailError(e) }
   finally { if (active(version) && request === followRequest) followLoading.value = false }
 }
-watch(() => [props.modelValue, props.customerId, canDetail.value, canContacts.value, canFollow.value], () => {
+watch(() => [props.modelValue, props.customerId, props.refreshKey, canDetail.value, canContacts.value, canFollow.value], () => {
   generation++
   detail.value = null; contacts.value = []; records.value = []
   error.value = ''; contactsError.value = ''; followError.value = ''

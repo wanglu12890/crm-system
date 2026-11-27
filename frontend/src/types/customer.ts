@@ -150,6 +150,7 @@ export interface CustomerDetail extends Omit<CustomerListItem, 'customerLevel' |
   address?: string | null
   remark?: string | null
   createdAt: string
+  version: number
 }
 export interface CustomerContact {
   id: string
@@ -177,4 +178,8 @@ export interface CustomerFollowRecord {
 }
 export interface CustomerFollowRecordPage extends Omit<CustomerListPageResult, 'records'> {
   records: CustomerFollowRecord[]
+}
+
+export interface UpdateCustomerRequest extends CreateCustomerRequest {
+  version: number
 }

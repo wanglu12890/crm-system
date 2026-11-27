@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { computed, nextTick, reactive, ref } from 'vue'
+import { computed, nextTick, reactive, ref, watch } from 'vue'
 import axios from 'axios'
 import { ElMessage } from 'element-plus'
 import type { FormInstance, FormRules } from 'element-plus'
-import { createCustomer } from '@/api/customer'
+import { createCustomer, getCustomerDetail, updateCustomer } from '@/api/customer'
 import {
   CUSTOMER_INDUSTRY_OPTIONS,
   CUSTOMER_LEVEL_OPTIONS,
@@ -19,10 +19,12 @@ import type {
   CustomerStatus,
   CustomerType
 } from '@/types/customer'
+import { detailError } from '@/utils/customerDetail'
 import type { ApiProblemDetail } from '@/utils/request'
 
 const props = defineProps<{
   modelValue: boolean
+  customerId?: string
 }>()
 
 const emit = defineEmits<{
@@ -32,6 +34,40 @@ const emit = defineEmits<{
 
 const formRef = ref<FormInstance>()
 const submitting = ref(false)
+const loading = ref(false)
+const loadError = ref(false)
+const loadErrorText = ref('')
+const conflict = ref(false)
+const version = ref(0)
+let loadVersion = 0
+const editing = computed(() => Boolean(props.customerId))
+async function loadCurrent() {
+  const request = ++loadVersion
+  if (!props.modelValue || !props.customerId) return
+  loading.value = true
+  loadError.value = false
+  conflict.value = false
+  try {
+    const { data } = await getCustomerDetail(props.customerId)
+    if (request !== loadVersion || !props.modelValue) return
+    for (const key of Object.keys(form) as (keyof CustomerFormData)[]) {
+      Object.assign(form, { [key]: data[key] ?? '' })
+    }
+    version.value = data.version
+  } catch (error: unknown) {
+    if (request === loadVersion) { loadError.value = true; loadErrorText.value = detailError(error) }
+  } finally {
+    if (request === loadVersion) loading.value = false
+  }
+}
+watch(() => [props.modelValue, props.customerId], () => {
+  loadVersion++
+  loading.value = false
+  resetForm()
+  conflict.value = false
+  loadError.value = false
+  if (props.modelValue && props.customerId) void loadCurrent()
+})
 
 const createInitialForm = (): CustomerFormData => ({
   customerName: '',
@@ -135,18 +171,22 @@ const handleBeforeClose = (done: () => void) => {
 }
 
 const handleSubmit = async () => {
-  if (!formRef.value || submitting.value) return
-  const valid = await formRef.value.validate().catch(() => false)
-  if (!valid) return
-
+  if (!formRef.value || submitting.value || loading.value || loadError.value || conflict.value) return
   submitting.value = true
+  const valid = await formRef.value.validate().catch(() => false)
+  if (!valid) { submitting.value = false; return }
   try {
-    const response = await createCustomer(buildRequest())
-    ElMessage.success('客户创建成功')
+    const id = props.customerId
+    const request = buildRequest()
+    const result = id
+      ? (await updateCustomer(id, { ...request, version: version.value }), { id, customerNo: '' })
+      : (await createCustomer(request)).data
+    ElMessage.success(editing.value ? '客户更新成功' : '客户创建成功')
     visible.value = false
-    emit('success', response.data)
+    emit('success', result)
   } catch (error: unknown) {
-    ElMessage.error(getErrorDetail(error) || '客户创建失败，请稍后重试')
+    if (axios.isAxiosError(error) && error.response?.status === 409) conflict.value = true
+    ElMessage.error(conflict.value ? '客户资料已变化，请重新加载后编辑' : (getErrorDetail(error) || '保存失败，请稍后重试'))
   } finally {
     submitting.value = false
   }
@@ -156,7 +196,7 @@ const handleSubmit = async () => {
 <template>
   <el-dialog
     v-model="visible"
-    title="新建客户"
+    :title="editing ? '编辑客户' : '新建客户'"
     width="min(760px, calc(100vw - 32px))"
     destroy-on-close
     :close-on-click-modal="!submitting"
@@ -165,7 +205,10 @@ const handleSubmit = async () => {
     :before-close="handleBeforeClose"
     @closed="resetForm"
   >
-    <el-form ref="formRef" :model="form" :rules="rules" label-width="92px">
+    <el-alert v-if="loadError" :title="loadErrorText" type="error" :closable="false" />
+    <el-alert v-if="conflict" title="客户资料已变化，请重新加载后编辑" type="warning" :closable="false" />
+    <el-button v-if="loadError || conflict" @click="loadCurrent">重新加载</el-button>
+    <el-form v-loading="loading" :disabled="submitting || loading || loadError || conflict" ref="formRef" :model="form" :rules="rules" label-width="92px">
       <section class="form-section">
         <h3>基本信息</h3>
         <div class="form-grid">
@@ -269,7 +312,7 @@ const handleSubmit = async () => {
 
     <template #footer>
       <el-button :disabled="submitting" @click="handleCancel">取消</el-button>
-      <el-button type="primary" :loading="submitting" @click="handleSubmit">确定</el-button>
+      <el-button type="primary" :loading="submitting" :disabled="loading || loadError || conflict" @click="handleSubmit">确定</el-button>
     </template>
   </el-dialog>
 </template>

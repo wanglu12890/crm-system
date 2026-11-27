@@ -18,3 +18,6 @@ export const getCustomerContacts = (id: string) =>
   request.get<import('@/types/customer').CustomerContact[]>(`/customers/${encodeURIComponent(id)}/contacts`)
 export const getCustomerFollowRecords = (id: string, page: number, size = 10) =>
   request.get<import('@/types/customer').CustomerFollowRecordPage>(`/customers/${encodeURIComponent(id)}/follow-records`, { params: { page, size } })
+
+export const updateCustomer = (id: string, data: import('@/types/customer').UpdateCustomerRequest) =>
+  request.put<void>(`/customers/${encodeURIComponent(id)}`, data)
